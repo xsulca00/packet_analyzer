@@ -16,8 +16,6 @@ namespace PacketAnalyzer { namespace Utils {
         stringstream s;
         Target t;
 
-        cerr << "Source: " << arg << '\n';
-
         if (!(s << arg) || !(s >> t) || !(s >> ws).eof())
             // TODO: not sure if this is correct
             if (!Is_same<Target,Source>())

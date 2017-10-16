@@ -3,6 +3,7 @@
 
 #include "utils.h"
 #include "arguments.h"
+#include "pcap_ptr.h"
 
 int main(int argc, char* argv[]) {
     using namespace PacketAnalyzer;
@@ -12,6 +13,8 @@ int main(int argc, char* argv[]) {
         Arguments::Parser ap {argc, argv, "ha:s:l:f:"};
 
         if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
+
+        PCAP::PcapPtr pcap {ap.files()[0]};
 
         // typed options
         for (const auto& s : ap.args())
@@ -26,7 +29,10 @@ int main(int argc, char* argv[]) {
         // no message because getopt writes error by itself
         return 2;
     } catch (Arguments::Parser::BadArgsNum) {
-        std::cerr << "Invalid arguments count!\n";
+        cerr << "Invalid arguments count!\n";
         return 3;
+    } catch (const runtime_error& e) {
+        cerr << "Runtime error caught: " << e.what() << '\n';
+        return 4;
     }
 }
