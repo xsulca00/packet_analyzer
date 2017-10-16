@@ -16,30 +16,11 @@ namespace PacketAnalyzer { namespace Arguments {
 
     class Parser {
     public:
-        // expcetion class
+        // exception classes
         class BadArgsStructure {};
         class BadArgsNum {};
 
-        Parser(int argc, char* argv[], const char* arguments) {
-            if (argc <= 1) throw BadArgsNum{};
-
-            // process options
-            for (int c {getopt(argc, argv, arguments)}; c != -1; c = getopt(argc, argv, arguments)) {
-                switch(c) {
-                    case 'h': options["-h"] = help; break;
-                    case 'a': options["-a"] = optarg; break;
-                    case 's': options["-s"] = optarg; break;
-                    case 'l': options["-l"] = optarg; break;
-                    case 'f': options["-f"] = optarg; break;
-                    default: throw BadArgsStructure{};
-                }
-            }
-
-            // process file names
-            for(int i {optind}; i != argc; ++i)
-                fileNames.emplace_back(argv[i]);
-        }
-
+        Parser(int argc, char* argv[], const char* arguments);
         const unordered_map<string, string>& args() const { return options; }
 
         template<typename T>
@@ -47,6 +28,11 @@ namespace PacketAnalyzer { namespace Arguments {
 
         const vector<string>& files() const { return fileNames; }
     private:
+        string aggr_key(const string& s) const;
+        string sort_key(const string& s) const;
+        string limit(const string& s) const;
+        string filter_expression(const string& s) const;
+
         static constexpr auto help =
             "Usage:\n"
             "isashark [-h] [-a aggr-key] [-s sort-key] [-l limit] [-f filter-expression] file ...\n"
@@ -75,12 +61,5 @@ namespace PacketAnalyzer { namespace Arguments {
         vector<string> fileNames;
     };
 
-    bool print_help(const string& msg) {
-        if (!msg.empty()) {
-            cerr << msg << '\n';
-            return true;
-        }
-        return false;
-    }
-
+    bool print_help(const string& msg);
 }}

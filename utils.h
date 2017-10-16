@@ -16,12 +16,12 @@ namespace PacketAnalyzer { namespace Utils {
         stringstream s;
         Target t;
 
-        if (Is_same<Target,Source>()) return arg;
-
         cerr << "Source: " << arg << '\n';
 
         if (!(s << arg) || !(s >> t) || !(s >> ws).eof())
-            throw runtime_error {"to<>() failed!"};
+            // TODO: not sure if this is correct
+            if (!Is_same<Target,Source>())
+                throw runtime_error {"to<>() failed!"};
 
         return t;
     }
