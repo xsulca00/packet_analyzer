@@ -13,9 +13,7 @@ namespace PacketAnalyzer { namespace PCAP {
 
     class PcapPtr {
     public:
-        array<char, PCAP_ERRBUF_SIZE> errbuf;
-
-        PcapPtr(const string& name)
+        explicit PcapPtr(const string& name)
             : handle {pcap_open_offline(name.c_str(), errbuf.data())}
         {
             if (!handle) throw runtime_error{"PcapPtr: Can't open pcap with name "s + errbuf.data()};
@@ -25,6 +23,7 @@ namespace PacketAnalyzer { namespace PCAP {
 
         ~PcapPtr() { pcap_close(handle); }
     private:
+        array<char, PCAP_ERRBUF_SIZE> errbuf;
         pcap_t* handle;
     };
 }}

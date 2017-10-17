@@ -5,7 +5,7 @@
 
 namespace PacketAnalyzer { namespace Arguments {
     Parser::Parser(int argc, char* argv[], const char* arguments) {
-        if (argc <= 1) throw BadArgsNum{};
+        if (argc <= 0) throw BadArgsNum{};
 
         // process options
         for (int c {getopt(argc, argv, arguments)}; c != -1; c = getopt(argc, argv, arguments)) {
@@ -22,6 +22,8 @@ namespace PacketAnalyzer { namespace Arguments {
         // process file names
         for(int i {optind}; i != argc; ++i)
             fileNames.emplace_back(argv[i]);
+
+        if (fileNames.empty()) throw runtime_error{"No files specified!"};
     }
     
     string Parser::aggr_key(const string& s) const {
@@ -41,8 +43,12 @@ namespace PacketAnalyzer { namespace Arguments {
     }
 
     string Parser::limit(const string& s) const {
-        try { Utils::to<unsigned>(s); } catch(const runtime_error&) { throw runtime_error {"Invalid limit number: " + s}; }
-
+        try { 
+            Utils::to<unsigned>(s); 
+        } catch(const runtime_error&) { 
+            throw runtime_error {"Invalid limit number: " + s}; 
+        }
+        if (!s.empty() && s.front() == '-') throw runtime_error{"Limit number is negative!"};
         return s;
     }
 

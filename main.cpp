@@ -14,17 +14,16 @@ int main(int argc, char* argv[]) {
 
         if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
 
-        PCAP::PcapPtr pcap {ap.files()[0]};
-
         // typed options
         for (const auto& s : ap.args())
             if (!s.second.empty())
                 cout << s.first << " : " << s.second << '\n';
 
         // file names
-        for (const auto& s : ap.files())
+        for (const auto& s : ap.files())  {
+            PCAP::PcapPtr pcap {s};
             cout << s << '\n';
-
+        }
     } catch (Arguments::Parser::BadArgsStructure) {
         // no message because getopt writes error by itself
         return 2;

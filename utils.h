@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits> 
+#include <iostream>
 
 namespace PacketAnalyzer { namespace Utils {
     using namespace std;
@@ -15,6 +16,9 @@ namespace PacketAnalyzer { namespace Utils {
     Target to(Source arg) {
         stringstream s;
         Target t;
+         
+        //cerr << "Source: '" << arg << "'" << '\n';
+        //cerr << "Target: '" << t <<  "'" << '\n';
 
         if (!(s << arg) || !(s >> t) || !(s >> ws).eof())
             // TODO: not sure if this is correct
