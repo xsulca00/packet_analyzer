@@ -27,6 +27,5 @@ namespace PacketAnalyzer { namespace Utils {
 
         return t;
     }
-
 }}
 
