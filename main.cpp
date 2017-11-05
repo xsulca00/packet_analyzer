@@ -203,7 +203,7 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
             const ip6_ext* e {(ip6_ext*)(packetL3+HeaderLen)};
             cout << "\n next: " << hex << unsigned{e->ip6e_nxt} << dec << '\n';
             cout << " size: " << unsigned{e->ip6e_len} << '\n';
-            e = (ip6_ext*)(packetL3+HeaderLen+e->ip6e_len+1);
+            e = (ip6_ext*)(packetL3+HeaderLen+e->ip6e_len*8+1);
             cout << " next: " << hex << unsigned{e->ip6e_nxt} << dec << '\n';
             cout << " size: " << unsigned{e->ip6e_len} << '\n';
             break;
