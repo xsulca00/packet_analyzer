@@ -141,6 +141,7 @@ inline bool IsFragmented(const ip& header) {
 }
 
 inline size_t HeaderLenIPv4(const ip& header) { return header.ip_hl * 4; }
+constexpr size_t HeaderLenIPv6() { return sizeof(ip6_hdr); }
 
 unordered_map<TupleToHashForIPv4, FragmentInfo> fragments;
 
@@ -150,6 +151,20 @@ inline bool IsExtension(uint8_t number) {
     return n != ExtensionsIPv6::TCP && 
            n != ExtensionsIPv6::UDP && 
            n != ExtensionsIPv6::ICMPv6;
+}
+
+const uint8_t* SkipExtensions(uint8_t next, const uint8_t* packet)
+{
+    const uint8_t* p {packet + HeaderLenIPv6()};
+    const ip6_ext* e {(ip6_ext*)p};
+    for (; IsExtension(next);) {
+        cout << " next: " << unsigned{next} << ' ';
+        next = e->ip6e_nxt;
+        p += (e->ip6e_len + 1)*8;
+        e = (ip6_ext*)p;
+    }
+    cout << " next: " << unsigned{next} << '\n';
+    return p;
 }
 
 void PacketLayer3(const uint8_t* packetL3, int packetType) {
@@ -196,27 +211,14 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
             cout << "IPv6 ";
             cout << SrcIP << " "
                  << DstIP << " "
-                 << unsigned{packetIP.ip6_hlim} << " "
-                 << unsigned{packetIP.ip6_nxt};
+                 << unsigned{packetIP.ip6_hlim} << " ";
+            
+            uint8_t next {packetIP.ip6_nxt};
+            packetL3 = SkipExtensions(next, packetL3);
 
-            size_t HeaderLen {sizeof(ip6_hdr)};
-            const ip6_ext* e {(ip6_ext*)(packetL3+HeaderLen)};
-            cout << "\n next: " << hex << unsigned{e->ip6e_nxt} << dec << '\n';
-            cout << " size: " << unsigned{e->ip6e_len} << '\n';
-            e = (ip6_ext*)(packetL3+HeaderLen+e->ip6e_len*8+1);
-            cout << " next: " << hex << unsigned{e->ip6e_nxt} << dec << '\n';
-            cout << " size: " << unsigned{e->ip6e_len} << '\n';
-            break;
+            uint8_t c {*(uint8_t*)packetL3};
 
-            uint8_t p {};
-            for (uint8_t next {packetIP.ip6_nxt}; IsExtension(next);) {
-                const ip6_ext* e {(ip6_ext*)p};
-
-                cout << "next: " << unsigned{next} << '\n';
-
-                next = e->ip6e_nxt;
-                p += e->ip6e_len + 1;
-            }
+            cout << "PING: " << unsigned{c} << ' ';
 
             break;
         }
