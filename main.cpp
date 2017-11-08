@@ -1,8 +1,9 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include <unordered_map>
+#include <map>
 #include <utility>
+#include <cstring>
 #include <sstream>
 
 extern "C" {
@@ -12,6 +13,7 @@ extern "C" {
 #include <netinet/ip6.h> 
 #include <netinet/in.h> 
 #include <arpa/inet.h> 
+#include <netinet/ip_icmp.h>
 }
 
 #include "utils.h"
@@ -167,8 +169,21 @@ const uint8_t* SkipExtensions(uint8_t next, const uint8_t* packet)
     return p;
 }
 
+map<int, pair<string, vector<string>>> errorMsgICMPv4;
+
+void PrintICMPv4(uint8_t type, uint8_t code) {
+    const auto& info = errorMsgICMPv4[type];
+
+    cout << "ICMPv4: " << unsigned{type} << ' ' << unsigned{code} << ' '
+         << info.first << ' ' << info.second[code] << " | ";
+}
+
+inline bool IsICMPv4(const ip& ip) {
+    return ip.ip_p == 1;
+}
+
 void PacketLayer3(const uint8_t* packetL3, int packetType) {
-    enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6 };
+    enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6, ICMPv4 = 1 };
 
     string SrcIP;
     string DstIP;
@@ -195,7 +210,13 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
                     cout << MakeIPv4StringToPrint(packet) << ' ';
                 }
             } else {
-                cout << MakeIPv4StringToPrint(packet) << ' ';
+                cout << MakeIPv4StringToPrint(packet) << " | ";
+
+                if (IsICMPv4(packet)) {
+                    const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
+
+                    PrintICMPv4(icmp.type, icmp.code);
+                }
             }
 
             break;
@@ -253,7 +274,7 @@ void PacketLayer2(const uint8_t* packet) {
             tie(packet, packetType) = vlan_packet(packet);
             break;
         }
-        default: break;
+        default: runtime_error{"Unknown frame type: " + to_string(packetType)};
     }
 
     cout << " | ";
@@ -267,6 +288,26 @@ void PrintPacket(const uint8_t* packet) {
 
 int main(int argc, char* argv[]) {
     try {
+        errorMsgICMPv4[0]  = make_pair("echo reply", vector<string>{""});
+        errorMsgICMPv4[3]  = make_pair("destination unreachable", 
+                             vector<string>{"net unreachable", "host unreachable", 
+                                            "protocol unreachable", "port unreachable", 
+                                            "fragmentation needed and DF set", "source route failed"});
+        errorMsgICMPv4[4]  = make_pair("source quench", vector<string>{""});
+        errorMsgICMPv4[5]  = make_pair("redirect", 
+                             vector<string>{"redirect datagrams for the network", 
+                                            "redirect datagrams for the host", 
+                                            "redirect datagrams for the type of service and network", 
+                                            "redirect datagrams for the type of service and host"});
+        errorMsgICMPv4[8]  = make_pair("echo", vector<string>{""});
+        errorMsgICMPv4[11] = make_pair("time exceeded", vector<string>{"time to live exceeded in transit", 
+                                                                       "fragment reassembly time exceeded"});
+        errorMsgICMPv4[12] = make_pair("parameter problem", vector<string>{"pointer indicates the error"});
+        errorMsgICMPv4[13] = make_pair("timestamp", vector<string>{""});
+        errorMsgICMPv4[14] = make_pair("timestamp reply", vector<string>{""});
+        errorMsgICMPv4[15] = make_pair("information request", vector<string>{""});
+        errorMsgICMPv4[16] = make_pair("information reply", vector<string>{""});
+
         Arguments::Parser ap {argc, argv, "ha:s:l:f:"};
         if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
         print_all(ap);
