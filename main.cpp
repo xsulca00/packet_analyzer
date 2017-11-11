@@ -11,9 +11,11 @@ extern "C" {
 #include <netinet/ether.h> 
 #include <netinet/ip.h> 
 #include <netinet/ip6.h> 
+#include <netinet/icmp6.h> 
 #include <netinet/in.h> 
 #include <arpa/inet.h> 
 #include <netinet/ip_icmp.h>
+#include <netinet/tcp.h>
 }
 
 #include "utils.h"
@@ -147,6 +149,7 @@ constexpr size_t HeaderLenIPv6() { return sizeof(ip6_hdr); }
 
 unordered_map<TupleToHashForIPv4, FragmentInfo> fragments;
 
+// TODO: extensions
 enum class ExtensionsIPv6 { TCP = 6, UDP = 17, ICMPv6 = 58  };
 inline bool IsExtension(uint8_t number) {
     ExtensionsIPv6 n {static_cast<ExtensionsIPv6>(number)};
@@ -155,8 +158,7 @@ inline bool IsExtension(uint8_t number) {
            n != ExtensionsIPv6::ICMPv6;
 }
 
-const uint8_t* SkipExtensions(uint8_t next, const uint8_t* packet)
-{
+pair<uint8_t, const uint8_t*> SkipExtensions(uint8_t next, const uint8_t* packet) {
     const uint8_t* p {packet + HeaderLenIPv6()};
     const ip6_ext* e {(ip6_ext*)p};
     for (; IsExtension(next);) {
@@ -166,10 +168,11 @@ const uint8_t* SkipExtensions(uint8_t next, const uint8_t* packet)
         e = (ip6_ext*)p;
     }
     cout << " next: " << unsigned{next} << '\n';
-    return p;
+    return make_pair(next, p);
 }
 
 map<int, pair<string, vector<string>>> errorMsgICMPv4;
+map<int, pair<string, vector<string>>> errorMsgICMPv6;
 
 void PrintICMPv4(uint8_t type, uint8_t code) {
     const auto& info = errorMsgICMPv4[type];
@@ -180,6 +183,36 @@ void PrintICMPv4(uint8_t type, uint8_t code) {
 
 inline bool IsICMPv4(const ip& ip) {
     return ip.ip_p == 1;
+}
+
+void PrintICMPv6(uint8_t type, uint8_t code) {
+    const auto& info = errorMsgICMPv6[type];
+
+    cout << "ICMPv6: " << unsigned{type} << ' ' << unsigned{code} << ' '
+         << info.first << ' ' << info.second[code] << " | ";
+}
+
+inline bool IsICMPv6(const ip6_hdr& ip) {
+    return ip.ip6_nxt == 58;
+}
+
+inline const uint8_t* SkipICMPv4Header(const uint8_t* packetL3) {
+    return packetL3 + sizeof(icmphdr);
+}
+
+inline const uint8_t* SkipICMPv6Header(const uint8_t* packetL3) {
+    return packetL3 + sizeof(icmp6_hdr);
+}
+
+void PacketLayer4(const uint8_t* packetL4, int packetType) {
+    enum class Layer4 { TCP = 6, UDP = 17 };
+    const tcphdr& tcp {*(tcphdr*)packetL4};
+
+    switch (static_cast<Layer4>(packetType)) {
+        case Layer4::TCP: cout << "TCP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '; break;
+        case Layer4::UDP: cout << "UDP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '; break;
+        default: throw runtime_error{"Layer4: Unknown packet type: " + to_string(packetType)};
+    }
 }
 
 void PacketLayer3(const uint8_t* packetL3, int packetType) {
@@ -214,16 +247,19 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
 
                 if (IsICMPv4(packet)) {
                     const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
-
                     PrintICMPv4(icmp.type, icmp.code);
+                    // packetL3 = SkipICMPv4Header(packetL3);
+                    return;
                 }
+
+                packetType = packet.ip_p;
             }
 
             break;
         }
         case Layer3::IPv6: 
         {
-            const ip6_hdr& packetIP {*(ip6_hdr*)packetL3};
+            ip6_hdr& packetIP {*(ip6_hdr*)packetL3};
             array<char, INET6_ADDRSTRLEN> buf;
 
             SrcIP = inet_ntop(AF_INET6, (void*)(&packetIP.ip6_src), buf.data(), buf.size());
@@ -235,18 +271,25 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
                  << unsigned{packetIP.ip6_hlim} << " ";
             
             uint8_t next {packetIP.ip6_nxt};
-            packetL3 = SkipExtensions(next, packetL3);
+            tie(next, packetL3) = SkipExtensions(next, packetL3);
+            packetIP = *(ip6_hdr*)packetL3;
 
-            uint8_t c {*(uint8_t*)packetL3};
+            if (IsICMPv6(packetIP)) {
+                const icmp6_hdr& icmp {*(icmp6_hdr*)(packetL3 + HeaderLenIPv6())};
+                PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
+                // packetL3 = SkipICMPv6Header(packetL3);
+                return;
+            }
 
-            cout << "PING: " << unsigned{c} << ' ';
+            // TODO: really?
+            packetType = next;
 
             break;
         }
         default: throw runtime_error{"Unknown packet type: " + to_string(packetType)};
     }
 
-    // PacketLayer4(packet, packetType);
+    PacketLayer4(packetL3, packetType);
 }
 
 void PrintSrcDstMAC(const uint8_t* packet) {
@@ -286,30 +329,55 @@ void PrintPacket(const uint8_t* packet) {
     PacketLayer2(packet);
 }
 
+void InitICMPv4Messages()
+{
+    errorMsgICMPv4[0]  = make_pair("echo reply", vector<string>{""});
+    errorMsgICMPv4[3]  = make_pair("destination unreachable", 
+                         vector<string>{"net unreachable", "host unreachable", 
+                                        "protocol unreachable", "port unreachable", 
+                                        "fragmentation needed and DF set", "source route failed"});
+    errorMsgICMPv4[4]  = make_pair("source quench", vector<string>{""});
+    errorMsgICMPv4[5]  = make_pair("redirect", 
+                         vector<string>{"redirect datagrams for the network", 
+                                        "redirect datagrams for the host", 
+                                        "redirect datagrams for the type of service and network", 
+                                        "redirect datagrams for the type of service and host"});
+    errorMsgICMPv4[8]  = make_pair("echo", vector<string>{""});
+    errorMsgICMPv4[11] = make_pair("time exceeded", vector<string>{"time to live exceeded in transit", 
+                                                                   "fragment reassembly time exceeded"});
+    errorMsgICMPv4[12] = make_pair("parameter problem", vector<string>{"pointer indicates the error"});
+    errorMsgICMPv4[13] = make_pair("timestamp", vector<string>{""});
+    errorMsgICMPv4[14] = make_pair("timestamp reply", vector<string>{""});
+    errorMsgICMPv4[15] = make_pair("information request", vector<string>{""});
+    errorMsgICMPv4[16] = make_pair("information reply", vector<string>{""});
+}
+
+void InitICMPv6Messages()
+{
+    errorMsgICMPv6[1]  = make_pair("destination unreachable", 
+                         vector<string>{"no route to destination", 
+                                        "communication with destination administratively prohibited", 
+                                        "beyond scope of source address", "address unreachable", 
+                                        "port unreachable", "source address failed ingress/egress policy", 
+                                        "reject route to destination"});
+    errorMsgICMPv6[2]  = make_pair("packet too big", vector<string>{""});
+    errorMsgICMPv6[3] = make_pair("time exceeded", vector<string>{"hop limit exceeded in transit", 
+                                                                  "fragment reassembly time exceeded"});
+    errorMsgICMPv6[4] = make_pair("parameter problem", vector<string>{"erroneous header field encountered",
+                                                                      "unrecognized next header type encountered",
+                                                                      "Unrecognized IPv6 option encountered"});
+    errorMsgICMPv6[128]  = make_pair("echo request", vector<string>{""});
+    errorMsgICMPv6[129]  = make_pair("echo reply", vector<string>{""});
+}
+
 int main(int argc, char* argv[]) {
     try {
-        errorMsgICMPv4[0]  = make_pair("echo reply", vector<string>{""});
-        errorMsgICMPv4[3]  = make_pair("destination unreachable", 
-                             vector<string>{"net unreachable", "host unreachable", 
-                                            "protocol unreachable", "port unreachable", 
-                                            "fragmentation needed and DF set", "source route failed"});
-        errorMsgICMPv4[4]  = make_pair("source quench", vector<string>{""});
-        errorMsgICMPv4[5]  = make_pair("redirect", 
-                             vector<string>{"redirect datagrams for the network", 
-                                            "redirect datagrams for the host", 
-                                            "redirect datagrams for the type of service and network", 
-                                            "redirect datagrams for the type of service and host"});
-        errorMsgICMPv4[8]  = make_pair("echo", vector<string>{""});
-        errorMsgICMPv4[11] = make_pair("time exceeded", vector<string>{"time to live exceeded in transit", 
-                                                                       "fragment reassembly time exceeded"});
-        errorMsgICMPv4[12] = make_pair("parameter problem", vector<string>{"pointer indicates the error"});
-        errorMsgICMPv4[13] = make_pair("timestamp", vector<string>{""});
-        errorMsgICMPv4[14] = make_pair("timestamp reply", vector<string>{""});
-        errorMsgICMPv4[15] = make_pair("information request", vector<string>{""});
-        errorMsgICMPv4[16] = make_pair("information reply", vector<string>{""});
-
         Arguments::Parser ap {argc, argv, "ha:s:l:f:"};
         if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
+    
+        InitICMPv4Messages();
+        InitICMPv6Messages();
+
         print_all(ap);
 
         size_t packetsCount {1};
