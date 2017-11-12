@@ -16,6 +16,7 @@ extern "C" {
 #include <arpa/inet.h> 
 #include <netinet/ip_icmp.h>
 #include <netinet/tcp.h>
+#include <netinet/udp.h>
 }
 
 #include "utils.h"
@@ -204,13 +205,87 @@ inline const uint8_t* SkipICMPv6Header(const uint8_t* packetL3) {
     return packetL3 + sizeof(icmp6_hdr);
 }
 
+inline const uint8_t* SkipIPv4Header(const uint8_t* packetL3) {
+    return packetL3 + HeaderLenIPv4(*(ip*)packetL3);
+}
+
+enum class Flags { CWR = 128, ECE = 64, URG = 32, ACK = 16, PSH = 8, RST = 4, SYN = 2, FIN = 1, NONE = 0 };
+constexpr Flags operator&(Flags l, Flags r) {
+    return static_cast<Flags>(static_cast<uint8_t>(l) & static_cast<uint8_t>(r));
+}
+
+constexpr bool operator==(Flags l, Flags r) {
+    return static_cast<uint8_t>(l) == static_cast<uint8_t>(r);
+}
+
+constexpr bool operator!=(Flags l, Flags r) {
+    return !(l == r);
+}
+
+string TcpFlagsString(uint8_t flags) {
+    Flags f {static_cast<Flags>(flags)};
+    string s;
+
+    if ((f & Flags::CWR) != Flags::NONE)
+        s += 'C';
+    else
+        s += '.';
+
+    if ((f & Flags::ECE) != Flags::NONE)
+        s += 'E';
+    else
+        s += '.';
+
+    if ((f & Flags::URG) != Flags::NONE)
+        s += 'U';
+    else
+        s += '.';
+
+    if ((f & Flags::ACK) != Flags::NONE)
+        s += 'A';
+    else
+        s += '.';
+
+    if ((f & Flags::PSH) != Flags::NONE)
+        s += 'P';
+    else
+        s += '.';
+
+    if ((f & Flags::RST) != Flags::NONE)
+        s += 'R';
+    else
+        s += '.';
+
+    if ((f & Flags::SYN) != Flags::NONE)
+        s += 'S';
+    else
+        s += '.';
+
+    if ((f & Flags::FIN) != Flags::NONE)
+        s += 'F';
+    else
+        s += '.';
+
+    return s;
+}
+
 void PacketLayer4(const uint8_t* packetL4, int packetType) {
     enum class Layer4 { TCP = 6, UDP = 17 };
-    const tcphdr& tcp {*(tcphdr*)packetL4};
 
     switch (static_cast<Layer4>(packetType)) {
-        case Layer4::TCP: cout << "TCP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '; break;
-        case Layer4::UDP: cout << "UDP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '; break;
+        case Layer4::TCP: 
+        {
+            const tcphdr& tcp {*(tcphdr*)packetL4};
+            cout << "TCP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '
+                 << ntohl(tcp.th_seq) << ' ' << ntohl(tcp.th_ack) << ' ' << TcpFlagsString(tcp.th_flags) << ' ';
+            break;
+        }
+        case Layer4::UDP: 
+        {
+            const udphdr& udp {*(udphdr*)packetL4};
+            cout << "UDP " << ntohs(udp.uh_sport) << ' ' << ntohs(udp.uh_dport) << ' '; 
+            break;
+        }
         default: throw runtime_error{"Layer4: Unknown packet type: " + to_string(packetType)};
     }
 }
@@ -241,6 +316,7 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
 
                 if (fragment.maxSize > 0 && fragment.currentSize >= fragment.maxSize) {
                     cout << MakeIPv4StringToPrint(packet) << ' ';
+                    packetL3 = SkipIPv4Header(packetL3);
                 }
             } else {
                 cout << MakeIPv4StringToPrint(packet) << " | ";
@@ -252,6 +328,7 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
                     return;
                 }
 
+                packetL3 = SkipIPv4Header(packetL3);
                 packetType = packet.ip_p;
             }
 
@@ -286,7 +363,7 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
 
             break;
         }
-        default: throw runtime_error{"Unknown packet type: " + to_string(packetType)};
+        default: throw runtime_error{"Layer3: Unknown packet type: " + to_string(packetType)};
     }
 
     PacketLayer4(packetL3, packetType);
