@@ -84,7 +84,7 @@ struct HeaderVLAN {
     uint16_t tpid;
 } __attribute__((packed));
 
-pair<const uint8_t*, int> vlan_packet(const uint8_t* packet) {
+string InfoVLAN(const uint8_t* packet) {
     uint32_t bytes {ntohl(*(uint32_t*)(packet + 12))};
 
     HeaderVLAN vlan {*(HeaderVLAN*)&bytes};
@@ -95,10 +95,11 @@ pair<const uint8_t*, int> vlan_packet(const uint8_t* packet) {
          << "VID:  " << vlan.tci.vid << '\n';
          */
 
-    cout << ' ' << vlan.tci.vid;
+    return ' ' + to_string(vlan.tci.vid);
+}
 
+pair<const uint8_t*, int> SkipVLAN(const uint8_t* packet) {
     int packetType {ntohs(*(uint16_t*)(packet + 16))};
-
     packet += 4;
 
     return make_pair(packet, packetType);
@@ -132,6 +133,22 @@ string MakeIPv4StringToPrint(const ip& packetIP) {
     return ss.str();
 }
 
+string MakeIPv6StringToPrint(const ip6_hdr& ip) {
+    array<char, INET6_ADDRSTRLEN> buf;
+
+    string SrcIP {inet_ntop(AF_INET6, (void*)(&ip.ip6_src), buf.data(), buf.size())};
+    string DstIP {inet_ntop(AF_INET6, (void*)(&ip.ip6_dst), buf.data(), buf.size())};
+
+    ostringstream ss;
+
+    ss  << "IPv6 "
+        << SrcIP << ' ' 
+        << DstIP << ' ' 
+        << unsigned{ip.ip6_hlim};
+
+    return ss.str();
+}
+
 TupleToHashForIPv4 TupleToHash(const ip& headerIPv4) {
     return {headerIPv4.ip_src.s_addr, 
             headerIPv4.ip_dst.s_addr, 
@@ -159,15 +176,20 @@ inline bool IsExtension(uint8_t number) {
            n != ExtensionsIPv6::ICMPv6;
 }
 
-pair<uint8_t, const uint8_t*> SkipExtensions(uint8_t next, const uint8_t* packet) {
+pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet) {
+    ip6_hdr& packetIP {*(ip6_hdr*)packet};
+    uint8_t next {packetIP.ip6_nxt};
     const uint8_t* p {packet + HeaderLenIPv6()};
+
     const ip6_ext* e {(ip6_ext*)p};
+
     for (; IsExtension(next);) {
         cout << " next: " << unsigned{next} << ' ';
         next = e->ip6e_nxt;
         p += (e->ip6e_len + 1)*8;
         e = (ip6_ext*)p;
     }
+
     cout << " next: " << unsigned{next} << '\n';
     return make_pair(next, p);
 }
@@ -175,26 +197,36 @@ pair<uint8_t, const uint8_t*> SkipExtensions(uint8_t next, const uint8_t* packet
 map<int, pair<string, vector<string>>> errorMsgICMPv4;
 map<int, pair<string, vector<string>>> errorMsgICMPv6;
 
-void PrintICMPv4(uint8_t type, uint8_t code) {
+string PrintICMPv4(uint8_t type, uint8_t code) {
     const auto& info = errorMsgICMPv4[type];
+    ostringstream ss;
 
-    cout << "ICMPv4: " << unsigned{type} << ' ' << unsigned{code} << ' '
-         << info.first << ' ' << info.second[code] << " | ";
+    ss  << "ICMPv4: " << unsigned{type} << ' ' << unsigned{code} << ' '
+        << info.first << ' ' << info.second[code];
+
+    return ss.str();
 }
 
 inline bool IsICMPv4(const ip& ip) {
     return ip.ip_p == 1;
 }
 
-void PrintICMPv6(uint8_t type, uint8_t code) {
+string PrintICMPv6(uint8_t type, uint8_t code) {
     const auto& info = errorMsgICMPv6[type];
+    ostringstream ss;
 
-    cout << "ICMPv6: " << unsigned{type} << ' ' << unsigned{code} << ' '
-         << info.first << ' ' << info.second[code] << " | ";
+    ss  << "ICMPv6: " << unsigned{type} << ' ' << unsigned{code} << ' '
+        << info.first << ' ' << info.second[code];
+
+    return ss.str();
 }
 
-inline bool IsICMPv6(const ip6_hdr& ip) {
-    return ip.ip6_nxt == 58;
+inline bool IsICMPv6(uint8_t next) {
+    return next == 58;
+}
+
+inline bool NoNextProtocol(uint8_t next) {
+    return next == 59;
 }
 
 inline const uint8_t* SkipICMPv4Header(const uint8_t* packetL3) {
@@ -209,7 +241,7 @@ inline const uint8_t* SkipIPv4Header(const uint8_t* packetL3) {
     return packetL3 + HeaderLenIPv4(*(ip*)packetL3);
 }
 
-enum class Flags { CWR = 128, ECE = 64, URG = 32, ACK = 16, PSH = 8, RST = 4, SYN = 2, FIN = 1, NONE = 0 };
+enum class Flags { CWR = 128, ECE = 64, URG = 32, ACK = 16, PSH = 8, RST = 4, SYN = 2, FIN = 1, NOTSET = 0 };
 constexpr Flags operator&(Flags l, Flags r) {
     return static_cast<Flags>(static_cast<uint8_t>(l) & static_cast<uint8_t>(r));
 }
@@ -226,42 +258,42 @@ string TcpFlagsString(uint8_t flags) {
     Flags f {static_cast<Flags>(flags)};
     string s;
 
-    if ((f & Flags::CWR) != Flags::NONE)
+    if ((f & Flags::CWR) != Flags::NOTSET)
         s += 'C';
     else
         s += '.';
 
-    if ((f & Flags::ECE) != Flags::NONE)
+    if ((f & Flags::ECE) != Flags::NOTSET)
         s += 'E';
     else
         s += '.';
 
-    if ((f & Flags::URG) != Flags::NONE)
+    if ((f & Flags::URG) != Flags::NOTSET)
         s += 'U';
     else
         s += '.';
 
-    if ((f & Flags::ACK) != Flags::NONE)
+    if ((f & Flags::ACK) != Flags::NOTSET)
         s += 'A';
     else
         s += '.';
 
-    if ((f & Flags::PSH) != Flags::NONE)
+    if ((f & Flags::PSH) != Flags::NOTSET)
         s += 'P';
     else
         s += '.';
 
-    if ((f & Flags::RST) != Flags::NONE)
+    if ((f & Flags::RST) != Flags::NOTSET)
         s += 'R';
     else
         s += '.';
 
-    if ((f & Flags::SYN) != Flags::NONE)
+    if ((f & Flags::SYN) != Flags::NOTSET)
         s += 'S';
     else
         s += '.';
 
-    if ((f & Flags::FIN) != Flags::NONE)
+    if ((f & Flags::FIN) != Flags::NOTSET)
         s += 'F';
     else
         s += '.';
@@ -269,29 +301,40 @@ string TcpFlagsString(uint8_t flags) {
     return s;
 }
 
-void PacketLayer4(const uint8_t* packetL4, int packetType) {
+string PacketLayer4(const uint8_t* packetL4, int packetType) {
     enum class Layer4 { TCP = 6, UDP = 17 };
+
+    string msg;
 
     switch (static_cast<Layer4>(packetType)) {
         case Layer4::TCP: 
         {
             const tcphdr& tcp {*(tcphdr*)packetL4};
-            cout << "TCP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '
-                 << ntohl(tcp.th_seq) << ' ' << ntohl(tcp.th_ack) << ' ' << TcpFlagsString(tcp.th_flags) << ' ';
+            ostringstream ss;
+            ss  << "TCP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '
+                << ntohl(tcp.th_seq) << ' ' << ntohl(tcp.th_ack) << ' ' << TcpFlagsString(tcp.th_flags);
+            msg = ss.str();
             break;
         }
         case Layer4::UDP: 
         {
             const udphdr& udp {*(udphdr*)packetL4};
-            cout << "UDP " << ntohs(udp.uh_sport) << ' ' << ntohs(udp.uh_dport) << ' '; 
+            ostringstream ss;
+            ss << "UDP " << ntohs(udp.uh_sport) << ' ' << ntohs(udp.uh_dport);
+
+            msg = ss.str();
             break;
         }
         default: throw runtime_error{"Layer4: Unknown packet type: " + to_string(packetType)};
     }
+
+    return msg;
 }
 
-void PacketLayer3(const uint8_t* packetL3, int packetType) {
+string PacketLayer3(const uint8_t* packetL3, int packetType) {
     enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6, ICMPv4 = 1 };
+
+    string msg;
 
     string SrcIP;
     string DstIP;
@@ -301,6 +344,7 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
         {
             const ip& packet {*(ip*)packetL3};
 
+            // TODO: rfc 815 algorithm
             if (IsFragmented(packet)) {
                 uint16_t offset {ntohs(packet.ip_off)};
                 size_t DataLen {ntohs(packet.ip_len) - HeaderLenIPv4(packet)};
@@ -315,17 +359,22 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
                 }
 
                 if (fragment.maxSize > 0 && fragment.currentSize >= fragment.maxSize) {
-                    cout << MakeIPv4StringToPrint(packet) << ' ';
+                    msg += MakeIPv4StringToPrint(packet);
+
+                    if (IsICMPv4(packet)) {
+                        const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
+                        return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
+                    }
+
                     packetL3 = SkipIPv4Header(packetL3);
+                    packetType = packet.ip_p;
                 }
             } else {
-                cout << MakeIPv4StringToPrint(packet) << " | ";
+                msg += MakeIPv4StringToPrint(packet);
 
                 if (IsICMPv4(packet)) {
                     const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
-                    PrintICMPv4(icmp.type, icmp.code);
-                    // packetL3 = SkipICMPv4Header(packetL3);
-                    return;
+                    return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
                 }
 
                 packetL3 = SkipIPv4Header(packetL3);
@@ -336,78 +385,81 @@ void PacketLayer3(const uint8_t* packetL3, int packetType) {
         }
         case Layer3::IPv6: 
         {
-            ip6_hdr& packetIP {*(ip6_hdr*)packetL3};
-            array<char, INET6_ADDRSTRLEN> buf;
+            const ip6_hdr& packetIP {*(ip6_hdr*)packetL3};
 
-            SrcIP = inet_ntop(AF_INET6, (void*)(&packetIP.ip6_src), buf.data(), buf.size());
-            DstIP = inet_ntop(AF_INET6, (void*)(&packetIP.ip6_dst), buf.data(), buf.size());
-
-            cout << "IPv6 ";
-            cout << SrcIP << " "
-                 << DstIP << " "
-                 << unsigned{packetIP.ip6_hlim} << " ";
+            msg += MakeIPv6StringToPrint(packetIP);
             
-            uint8_t next {packetIP.ip6_nxt};
-            tie(next, packetL3) = SkipExtensions(next, packetL3);
-            packetIP = *(ip6_hdr*)packetL3;
+            uint8_t next {};
+            // TODO: extended headers mrknout poradne do rfc
+            tie(next, packetL3) = SkipExtensions(packetL3);
 
-            if (IsICMPv6(packetIP)) {
-                const icmp6_hdr& icmp {*(icmp6_hdr*)(packetL3 + HeaderLenIPv6())};
-                PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
-                // packetL3 = SkipICMPv6Header(packetL3);
-                return;
+            if (NoNextProtocol(next)) {
+                return msg;
+            }
+
+            if (IsICMPv6(next)) {
+                const icmp6_hdr& icmp {*(icmp6_hdr*)(packetL3)};
+                return msg + " | " + PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
             }
 
             // TODO: really?
             packetType = next;
-
             break;
         }
         default: throw runtime_error{"Layer3: Unknown packet type: " + to_string(packetType)};
     }
 
-    PacketLayer4(packetL3, packetType);
+    return msg + " | " + PacketLayer4(packetL3, packetType);
 }
 
-void PrintSrcDstMAC(const uint8_t* packet) {
+string PrintSrcDstMAC(const uint8_t* packet) {
     string SrcMAC;
     string DstMAC;
     tie(SrcMAC, DstMAC) = SrcDstMAC(packet);
-    cout << "Ethernet: " << SrcMAC << " " << DstMAC;
+    return "Ethernet: " + SrcMAC + ' ' + DstMAC;
 }
 
-void PacketLayer2(const uint8_t* packet) {
+string PacketLayer2(const uint8_t* packet) {
     enum class Layer2 { IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
 
-    PrintSrcDstMAC(packet);
+    string msg;
+
+    msg += PrintSrcDstMAC(packet);
 
     auto packetType = EtherType(packet);
     switch (static_cast<Layer2>(packetType)) {
         case Layer2::IEEE_802_1q:
         {
-            tie(packet, packetType) = vlan_packet(packet);
+            msg += InfoVLAN(packet);
+            tie(packet, packetType) = SkipVLAN(packet);
             break;
         }
         case Layer2::IEEE_802_1ad: 
         {
-            tie(packet, packetType) = vlan_packet(packet);
-            tie(packet, packetType) = vlan_packet(packet);
+            msg += InfoVLAN(packet);
+            tie(packet, packetType) = SkipVLAN(packet);
+            msg += InfoVLAN(packet);
+            tie(packet, packetType) = SkipVLAN(packet);
             break;
         }
         default: runtime_error{"Unknown frame type: " + to_string(packetType)};
     }
 
-    cout << " | ";
     constexpr auto ipOffset {14};
-    PacketLayer3(packet+ipOffset, packetType);
+    return msg + " | " + PacketLayer3(packet+ipOffset, packetType);
 }
 
-void PrintPacket(const uint8_t* packet) {
-    PacketLayer2(packet);
+string PrintHeader(const pcap_pkthdr& header) {
+    return to_string(ToMicroSeconds(header.ts)) +' ' + to_string(header.len);
+}
+
+string PrintPacket( const uint8_t* packet) {
+    return PacketLayer2(packet);
 }
 
 void InitICMPv4Messages()
 {
+    // TODO: indexy vektoru
     errorMsgICMPv4[0]  = make_pair("echo reply", vector<string>{""});
     errorMsgICMPv4[3]  = make_pair("destination unreachable", 
                          vector<string>{"net unreachable", "host unreachable", 
@@ -431,6 +483,7 @@ void InitICMPv4Messages()
 
 void InitICMPv6Messages()
 {
+    // TODO: indexy vektoru
     errorMsgICMPv6[1]  = make_pair("destination unreachable", 
                          vector<string>{"no route to destination", 
                                         "communication with destination administratively prohibited", 
@@ -462,11 +515,11 @@ int main(int argc, char* argv[]) {
             const auto& header = a.Header();
             const uint8_t* packet = a.Packet();
 
-            cout << packetsCount << ": " << ToMicroSeconds(header.ts) << " " << header.len << " | ";
-
-            PrintPacket(packet);
-
-            cout << '\n';
+            // TODO: do not pring fragmented packet
+            if (true) {
+                cout    << packetsCount << ": " << PrintHeader(header)
+                        << " | " << PrintPacket(packet) << '\n';
+            }
         }
 
         for (const auto& p : fragments)
