@@ -5,6 +5,7 @@
 #include <utility>
 #include <cstring>
 #include <sstream>
+#include <iomanip>
 
 extern "C" {
 #include <netinet/if_ether.h> 
@@ -105,11 +106,25 @@ pair<const uint8_t*, int> SkipVLAN(const uint8_t* packet) {
     return make_pair(packet, packetType);
 }
 
+string PrintMAC(const ether_addr* mac) {
+    const uint8_t* octets {&mac->ether_addr_octet[0]};
+
+    ostringstream ss;
+    ss.fill('0');
+    ss << hex << setw(2) << unsigned{octets[0]} << ':' 
+              << setw(2) << unsigned{octets[1]} << ':' 
+              << setw(2) << unsigned{octets[2]} << ':' 
+              << setw(2) << unsigned{octets[3]} << ':' 
+              << setw(2) << unsigned{octets[4]} << ':' 
+              << setw(2) << unsigned{octets[5]};
+    return ss.str();
+}
+
 pair<string, string> SrcDstMAC(const uint8_t* packet) {
     const ether_header* eptr {reinterpret_cast<const ether_header*>(packet)};
 
-    string SrcMAC {ether_ntoa((const ether_addr*)(&eptr->ether_shost))};
-    string DstMAC {ether_ntoa((const ether_addr*)(&eptr->ether_dhost))};
+    string SrcMAC {PrintMAC((const ether_addr*)(&eptr->ether_shost))};
+    string DstMAC {PrintMAC((const ether_addr*)(&eptr->ether_dhost))};
 
     return make_pair(SrcMAC, DstMAC);
 }
@@ -123,14 +138,7 @@ string MakeIPv4StringToPrint(const ip& packetIP) {
     string SrcIP {inet_ntoa(packetIP.ip_src)};
     string DstIP {inet_ntoa(packetIP.ip_dst)};
 
-    ostringstream ss;
-
-    ss << "IPv4"    << ' '
-       << SrcIP     << ' ' 
-       << DstIP     << ' ' 
-       << unsigned{packetIP.ip_ttl};
-
-    return ss.str();
+    return "IPv4: " + SrcIP + ' ' + DstIP + ' ' + to_string(packetIP.ip_ttl);
 }
 
 string MakeIPv6StringToPrint(const ip6_hdr& ip) {
@@ -139,14 +147,7 @@ string MakeIPv6StringToPrint(const ip6_hdr& ip) {
     string SrcIP {inet_ntop(AF_INET6, (void*)(&ip.ip6_src), buf.data(), buf.size())};
     string DstIP {inet_ntop(AF_INET6, (void*)(&ip.ip6_dst), buf.data(), buf.size())};
 
-    ostringstream ss;
-
-    ss  << "IPv6 "
-        << SrcIP << ' ' 
-        << DstIP << ' ' 
-        << unsigned{ip.ip6_hlim};
-
-    return ss.str();
+    return "IPv6: " + SrcIP + ' ' + DstIP + ' ' + to_string(ip.ip6_hlim);
 }
 
 TupleToHashForIPv4 TupleToHash(const ip& headerIPv4) {
@@ -183,7 +184,7 @@ inline bool IsIPv6Extension(uint8_t number) {
            n == ExtensionsIPv6::NoNextHeader;
 }
 
-inline bool IsUpperLayer(uint8_t number) {
+inline bool IsProtocolFromL4(uint8_t number) {
     UpperLayerIPv6 n {static_cast<UpperLayerIPv6>(number)};
     return n == UpperLayerIPv6::TCP || 
            n == UpperLayerIPv6::UDP || 
@@ -197,14 +198,14 @@ pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet) {
 
     const ip6_ext* e {(ip6_ext*)p};
 
-    for (; !IsUpperLayer(next);) {
-        cout << " next: " << unsigned{next} << ' ';
+    for (; !IsProtocolFromL4(next);) {
+        // cout << " next: " << unsigned{next} << ' ';
         next = e->ip6e_nxt;
         p += (e->ip6e_len + 1)*8;
         e = (ip6_ext*)p;
     }
 
-    cout << " next: " << unsigned{next} << '\n';
+    // cout << " next: " << unsigned{next} << '\n';
     return make_pair(next, p);
 }
 
@@ -280,22 +281,24 @@ private:
     map<int, pair<string, vector<string>>> errorMsgICMPv6;
 };
 
+inline bool IsICMPv4(const ip& ip) {
+    return ip.ip_p == 1;
+}
+
 string PrintICMPv4(uint8_t type, uint8_t code) {
     static ICMPv4ErrorMessages ICMPv4Messages;
 
     string typeMsg;
     string codeMsg;
     tie(typeMsg, codeMsg) = ICMPv4Messages.MessageFor(type, code);
-    ostringstream ss;
 
-    ss  << "ICMPv4: " << unsigned{type} << ' ' << unsigned{code} << ' '
-        << typeMsg << ' ' << codeMsg;
+    string errorMsg;
 
-    return ss.str();
-}
+    if (!typeMsg.empty() && !codeMsg.empty()) {
+        errorMsg = ' ' + typeMsg + ' ' + codeMsg;
+    }
 
-inline bool IsICMPv4(const ip& ip) {
-    return ip.ip_p == 1;
+    return "ICMPv4: " + to_string(type) + ' ' + to_string(code) + errorMsg;
 }
 
 string PrintICMPv6(uint8_t type, uint8_t code) {
@@ -305,20 +308,21 @@ string PrintICMPv6(uint8_t type, uint8_t code) {
     string codeMsg;
     tie(typeMsg, codeMsg) = ICMPv6Messages.MessageFor(type, code);
 
-    ostringstream ss;
+    string errorMsg;
 
-    ss  << "ICMPv6: " << unsigned{type} << ' ' << unsigned{code} << ' '
-        << typeMsg<< ' ' << codeMsg;
+    if (!typeMsg.empty() && !codeMsg.empty()) {
+        errorMsg = ' ' + typeMsg + ' ' + codeMsg;
+    }
 
-    return ss.str();
+    return "ICMPv6: " + to_string(type) + ' ' + to_string(code) + errorMsg;
 }
 
 inline bool IsICMPv6(uint8_t next) {
-    return next == 58;
+    return static_cast<UpperLayerIPv6>(next) == UpperLayerIPv6::ICMPv6;
 }
 
 inline bool NoNextProtocol(uint8_t next) {
-    return next == 59;
+    return static_cast<ExtensionsIPv6>(next) == ExtensionsIPv6::NoNextHeader;
 }
 
 inline const uint8_t* SkipICMPv4Header(const uint8_t* packetL3) {
@@ -333,7 +337,7 @@ inline const uint8_t* SkipIPv4Header(const uint8_t* packetL3) {
     return packetL3 + HeaderLenIPv4(*(ip*)packetL3);
 }
 
-enum class Flags { CWR = 128, ECE = 64, URG = 32, ACK = 16, PSH = 8, RST = 4, SYN = 2, FIN = 1, NOTSET = 0 };
+enum class Flags { CWR = 128, ECE = 64, URG = 32, ACK = 16, PSH = 8, RST = 4, SYN = 2, FIN = 1, NotSet = 0 };
 constexpr Flags operator&(Flags l, Flags r) {
     return static_cast<Flags>(static_cast<uint8_t>(l) & static_cast<uint8_t>(r));
 }
@@ -350,42 +354,42 @@ string TcpFlagsString(uint8_t flags) {
     Flags f {static_cast<Flags>(flags)};
     string s;
 
-    if ((f & Flags::CWR) != Flags::NOTSET)
+    if ((f & Flags::CWR) != Flags::NotSet)
         s += 'C';
     else
         s += '.';
 
-    if ((f & Flags::ECE) != Flags::NOTSET)
+    if ((f & Flags::ECE) != Flags::NotSet)
         s += 'E';
     else
         s += '.';
 
-    if ((f & Flags::URG) != Flags::NOTSET)
+    if ((f & Flags::URG) != Flags::NotSet)
         s += 'U';
     else
         s += '.';
 
-    if ((f & Flags::ACK) != Flags::NOTSET)
+    if ((f & Flags::ACK) != Flags::NotSet)
         s += 'A';
     else
         s += '.';
 
-    if ((f & Flags::PSH) != Flags::NOTSET)
+    if ((f & Flags::PSH) != Flags::NotSet)
         s += 'P';
     else
         s += '.';
 
-    if ((f & Flags::RST) != Flags::NOTSET)
+    if ((f & Flags::RST) != Flags::NotSet)
         s += 'R';
     else
         s += '.';
 
-    if ((f & Flags::SYN) != Flags::NOTSET)
+    if ((f & Flags::SYN) != Flags::NotSet)
         s += 'S';
     else
         s += '.';
 
-    if ((f & Flags::FIN) != Flags::NOTSET)
+    if ((f & Flags::FIN) != Flags::NotSet)
         s += 'F';
     else
         s += '.';
@@ -396,31 +400,24 @@ string TcpFlagsString(uint8_t flags) {
 string PacketLayer4(const uint8_t* packetL4, int packetType) {
     enum class Layer4 { TCP = 6, UDP = 17 };
 
-    string msg;
-
     switch (static_cast<Layer4>(packetType)) {
         case Layer4::TCP: 
         {
             const tcphdr& tcp {*(tcphdr*)packetL4};
             ostringstream ss;
-            ss  << "TCP " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '
+            ss  << "TCP: " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '
                 << ntohl(tcp.th_seq) << ' ' << ntohl(tcp.th_ack) << ' ' << TcpFlagsString(tcp.th_flags);
-            msg = ss.str();
-            break;
+            return ss.str();
         }
         case Layer4::UDP: 
         {
             const udphdr& udp {*(udphdr*)packetL4};
             ostringstream ss;
-            ss << "UDP " << ntohs(udp.uh_sport) << ' ' << ntohs(udp.uh_dport);
-
-            msg = ss.str();
-            break;
+            ss << "UDP: " << ntohs(udp.uh_sport) << ' ' << ntohs(udp.uh_dport);
+            return ss.str();
         }
         default: throw runtime_error{"Layer4: Unknown packet type: " + to_string(packetType)};
     }
-
-    return msg;
 }
 
 string PacketLayer3(const uint8_t* packetL3, int packetType) {
@@ -499,6 +496,8 @@ string PacketLayer3(const uint8_t* packetL3, int packetType) {
         default: throw runtime_error{"Layer3: Unknown packet type: " + to_string(packetType)};
     }
 
+    if (!IsProtocolFromL4(packetType)) return msg;
+
     return msg + " | " + PacketLayer4(packetL3, packetType);
 }
 
@@ -547,27 +546,34 @@ string PrintPacket( const uint8_t* packet) {
     return PacketLayer2(packet);
 }
 
+void PrintAllPacketsInFile(const string& name) {
+    static size_t packetsCount {1};
+
+    for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
+        // TODO: do not print fragmented packet
+        if (true) {
+            cout    << packetsCount << ": " 
+                    << PrintHeader(a.Header()) << " | " 
+                    << PrintPacket(a.Packet()) << '\n';
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
     try {
         Arguments::Parser ap {argc, argv, "ha:s:l:f:"};
         if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
     
-        print_all(ap);
+        //print_all(ap);
 
-        size_t packetsCount {1};
-        for (PCAP::Analyzer a {ap.files()[0]}; a.NextPacket(); ++packetsCount) {
-            const auto& header = a.Header();
-            const uint8_t* packet = a.Packet();
-
-            // TODO: do not print fragmented packet
-            if (true) {
-                cout    << packetsCount << ": " << PrintHeader(header)
-                        << " | " << PrintPacket(packet) << '\n';
-            }
+        for (const auto& name : ap.files()) {
+            PrintAllPacketsInFile(name);
         }
 
+        /*
         for (const auto& p : fragments)
             cout << p.second.maxSize << " : " <<p.second.currentSize << '\n';
+            */
     } catch (Arguments::Parser::BadArgsStructure) {
         // no message because getopt writes error by itself
         return 2;
