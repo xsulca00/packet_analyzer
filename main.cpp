@@ -62,7 +62,15 @@ namespace std {
 }
 
 struct Aggregation { size_t packets; size_t bytes; };
+
 map<string, Aggregation> aggregations;
+
+void addAggr(const string& key, size_t size) {
+    auto& p = aggregations[key];
+    ++p.packets;
+    p.bytes += size;
+}
+
 string aggr_key;
 
 void print_all(Arguments::Parser& ap) {
@@ -422,12 +430,12 @@ string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
             string srcPort {to_string(ntohs(tcp.th_sport))};
             string dstPort {to_string(ntohs(tcp.th_dport))};
 
-            if (aggr_key == "srcport") {
-                ++aggregations[srcPort].packets;
-                aggregations[srcPort].bytes += packetLen;
-            } else if (aggr_key == "dstport") {
-                ++aggregations[dstPort].packets;
-                aggregations[dstPort].bytes += packetLen;
+            if (!aggr_key.empty()) {
+                if (aggr_key == "srcport") {
+                    addAggr(srcPort, packetLen);
+                } else if (aggr_key == "dstport") {
+                    addAggr(dstPort, packetLen);
+                }
             }
 
             ostringstream ss;
@@ -442,12 +450,12 @@ string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
             string srcPort {to_string(ntohs(udp.uh_sport))};
             string dstPort {to_string(ntohs(udp.uh_dport))};
 
-            if (aggr_key == "srcport") {
-                ++aggregations[srcPort].packets;
-                aggregations[srcPort].bytes += packetLen;
-            } else if (aggr_key == "dstport") {
-                ++aggregations[dstPort].packets;
-                aggregations[dstPort].bytes += packetLen;
+            if (!aggr_key.empty()) {
+                if (aggr_key == "srcport") {
+                    addAggr(srcPort, packetLen);
+                } else if (aggr_key == "dstport") {
+                    addAggr(dstPort, packetLen);
+                }
             }
 
             ostringstream ss;
@@ -497,12 +505,12 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
                         return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
                     }
                     
-                    if (aggr_key == "srcip") {
-                        ++aggregations[src].packets;
-                        aggregations[src].bytes += packetLen;
-                    } else if (aggr_key == "dstip") {
-                        ++aggregations[dst].packets;
-                        aggregations[dst].bytes += packetLen;
+                    if (!aggr_key.empty()) {
+                        if (aggr_key == "srcip") {
+                            addAggr(src, packetLen);
+                        } else if (aggr_key == "dstip") {
+                            addAggr(dst, packetLen);
+                        }
                     }
 
                     packetL3 = SkipIPv4Header(packetL3);
@@ -520,12 +528,12 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
                     return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
                 }
 
-                if (aggr_key == "srcip") {
-                    ++aggregations[src].packets;
-                    aggregations[src].bytes += packetLen;
-                } else if (aggr_key == "dstip") {
-                    ++aggregations[dst].packets;
-                    aggregations[dst].bytes += packetLen;
+                if (!aggr_key.empty()) {
+                    if (aggr_key == "srcip") {
+                        addAggr(src, packetLen);
+                    } else if (aggr_key == "dstip") {
+                        addAggr(dst, packetLen);
+                    }
                 }
 
                 packetL3 = SkipIPv4Header(packetL3);
@@ -541,12 +549,12 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
             string dst;
             tie(src,dst) = SrcAndDstIPv6Address(packetIP);
 
-            if (aggr_key == "srcip") {
-                ++aggregations[src].packets;
-                aggregations[src].bytes += packetLen;
-            } else if (aggr_key == "dstip") {
-                ++aggregations[dst].packets;
-                aggregations[dst].bytes += packetLen;
+            if (!aggr_key.empty()) {
+                if (aggr_key == "srcip") {
+                    addAggr(src, packetLen);
+                } else if (aggr_key == "dstip") {
+                    addAggr(dst, packetLen);
+                }
             }
 
             msg += MakeIPv6StringToPrint(src, dst, packetIP.ip6_hlim);
@@ -589,12 +597,12 @@ string PacketLayer2(const uint8_t* packet, size_t packetLen) {
 
     msg += PrintSrcDstMAC(srcMAC, dstMAC);
 
-    if (aggr_key == "srcmac") {
-        ++aggregations[srcMAC].packets;
-        aggregations[srcMAC].bytes += packetLen;
-    } else if (aggr_key == "dstmac") {
-        ++aggregations[dstMAC].packets;
-        aggregations[dstMAC].bytes += packetLen;
+    if (!aggr_key.empty()) {
+        if (aggr_key == "srcip") {
+            addAggr(srcMAC, packetLen);
+        } else if (aggr_key == "dstip") {
+            addAggr(dstMAC, packetLen);
+        }
     }
 
     auto packetType = EtherType(packet);
@@ -682,7 +690,6 @@ int main(int argc, char* argv[]) {
         }
 
         {
-
             if (sortSet) {
                 if (sortBy == "packets") {
                     auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.packets > r.second.packets; };
