@@ -662,10 +662,9 @@ int main(int argc, char* argv[]) {
             tie(aggr_key,set) = ap.get<string>("-a");
         }
 
-
         vector<pair<string, Aggregation>> v; 
         for (const auto& name : ap.files()) {
-            for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
+            for (PCAP::Analyzer a {name, ap.get<string>("-f").first}; a.NextPacket(); ++packetsCount) {
                 // TODO: do not print fragmented packet
                 string message;
                 if (packetsCount <= limit) {

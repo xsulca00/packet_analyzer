@@ -16,7 +16,7 @@ namespace PacketAnalyzer { namespace Utils {
     Target to(Source arg) {
         stringstream s;
         Target t;
-         
+
         //cerr << "Source: '" << arg << "'" << '\n';
         //cerr << "Target: '" << t <<  "'" << '\n';
 
@@ -26,6 +26,11 @@ namespace PacketAnalyzer { namespace Utils {
                 throw runtime_error {"to<>() failed!"};
 
         return t;
+    }
+
+    template<>
+    inline string to(string arg) {
+        return arg;
     }
 }}
 
