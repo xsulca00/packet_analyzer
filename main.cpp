@@ -570,7 +570,7 @@ int main(int argc, char* argv[]) {
         if (!l.empty())
             size_t limit {ap.get<size_t>("-l")};
         else
-            cout << "Limit set!\n";
+            cout << "Limit not set!\n";
 
 
 
