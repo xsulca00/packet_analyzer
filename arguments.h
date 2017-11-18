@@ -24,7 +24,11 @@ namespace PacketAnalyzer { namespace Arguments {
         const unordered_map<string, string>& args() const { return options; }
 
         template<typename T>
-        T get(const string& o) { return Utils::to<T>(options[o]); }
+        pair<T,bool> get(const string& s) { 
+            const auto& o = options[s];
+            if (o.empty()) return make_pair(T{}, false);
+            return make_pair(Utils::to<T>(o), !o.empty());
+        }
 
         const vector<string>& files() const { return fileNames; }
     private:
@@ -61,5 +65,5 @@ namespace PacketAnalyzer { namespace Arguments {
         vector<string> fileNames;
     };
 
-    bool print_help(const string& msg);
+    bool print_help(Arguments::Parser& ap);
 }}

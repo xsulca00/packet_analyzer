@@ -6,6 +6,7 @@
 #include <cstring>
 #include <sstream>
 #include <iomanip>
+#include <limits>
 
 extern "C" {
 #include <netinet/if_ether.h> 
@@ -58,6 +59,10 @@ namespace std {
         }
     };
 }
+
+struct Aggregation { size_t packets; size_t bytes; };
+unordered_map<string, Aggregation> aggregations;
+string aggr_key;
 
 void print_all(Arguments::Parser& ap) {
     // typed options
@@ -134,20 +139,28 @@ int EtherType(const uint8_t* packet) {
     return ntohs(eptr->ether_type);
 }
 
-string MakeIPv4StringToPrint(const ip& packetIP) {
-    string SrcIP {inet_ntoa(packetIP.ip_src)};
-    string DstIP {inet_ntoa(packetIP.ip_dst)};
+pair<string, string> SrcAndDstIPv4Address(const ip& iip) {
+    string src {inet_ntoa(iip.ip_src)};
+    string dst {inet_ntoa(iip.ip_dst)};
 
-    return "IPv4: " + SrcIP + ' ' + DstIP + ' ' + to_string(packetIP.ip_ttl);
+    return make_pair(src, dst);
 }
 
-string MakeIPv6StringToPrint(const ip6_hdr& ip) {
+string MakeIPv4StringToPrint(const string& src, const string& dst, uint8_t ttl) {
+    return "IPv4: " + src + ' ' + dst + ' ' + to_string(ttl);
+}
+
+pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip) {
     array<char, INET6_ADDRSTRLEN> buf;
 
-    string SrcIP {inet_ntop(AF_INET6, (void*)(&ip.ip6_src), buf.data(), buf.size())};
-    string DstIP {inet_ntop(AF_INET6, (void*)(&ip.ip6_dst), buf.data(), buf.size())};
+    string src {inet_ntop(AF_INET6, (void*)(&ip.ip6_src), buf.data(), buf.size())};
+    string dst {inet_ntop(AF_INET6, (void*)(&ip.ip6_dst), buf.data(), buf.size())};
 
-    return "IPv6: " + SrcIP + ' ' + DstIP + ' ' + to_string(ip.ip6_hlim);
+    return make_pair(src, dst);
+}
+
+string MakeIPv6StringToPrint(const string& src, const string& dst, uint8_t hopLimit) {
+    return "IPv6: " + src + ' ' + dst + ' ' + to_string(hopLimit);
 }
 
 TupleToHashForIPv4 TupleToHash(const ip& headerIPv4) {
@@ -397,30 +410,54 @@ string TcpFlagsString(uint8_t flags) {
     return s;
 }
 
-string PacketLayer4(const uint8_t* packetL4, int packetType) {
+string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
     enum class Layer4 { TCP = 6, UDP = 17 };
 
     switch (static_cast<Layer4>(packetType)) {
         case Layer4::TCP: 
         {
             const tcphdr& tcp {*(tcphdr*)packetL4};
+
+            string srcPort {to_string(ntohs(tcp.th_sport))};
+            string dstPort {to_string(ntohs(tcp.th_dport))};
+
+            if (aggr_key == "srcport") {
+                ++aggregations[srcPort].packets;
+                aggregations[srcPort].bytes += packetLen;
+            } else if (aggr_key == "dstport") {
+                ++aggregations[dstPort].packets;
+                aggregations[dstPort].bytes += packetLen;
+            }
+
             ostringstream ss;
-            ss  << "TCP: " << ntohs(tcp.th_sport) << ' ' << ntohs(tcp.th_dport) << ' '
+            ss  << "TCP: " << srcPort << ' ' << dstPort << ' '
                 << ntohl(tcp.th_seq) << ' ' << ntohl(tcp.th_ack) << ' ' << TcpFlagsString(tcp.th_flags);
             return ss.str();
         }
         case Layer4::UDP: 
         {
             const udphdr& udp {*(udphdr*)packetL4};
+
+            string srcPort {to_string(ntohs(udp.uh_sport))};
+            string dstPort {to_string(ntohs(udp.uh_dport))};
+
+            if (aggr_key == "srcport") {
+                ++aggregations[srcPort].packets;
+                aggregations[srcPort].bytes += packetLen;
+            } else if (aggr_key == "dstport") {
+                ++aggregations[dstPort].packets;
+                aggregations[dstPort].bytes += packetLen;
+            }
+
             ostringstream ss;
-            ss << "UDP: " << ntohs(udp.uh_sport) << ' ' << ntohs(udp.uh_dport);
+            ss << "UDP: " << srcPort << ' ' << dstPort;
             return ss.str();
         }
         default: throw runtime_error{"Layer4: Unknown packet type: " + to_string(packetType)};
     }
 }
 
-string PacketLayer3(const uint8_t* packetL3, int packetType) {
+string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
     enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6, ICMPv4 = 1 };
 
     string msg;
@@ -435,35 +472,59 @@ string PacketLayer3(const uint8_t* packetL3, int packetType) {
 
             // TODO: rfc 815 algorithm
             if (IsFragmented(packet)) {
+                size_t dataLen {ntohs(packet.ip_len) - HeaderLenIPv4(packet)};
                 uint16_t offset {ntohs(packet.ip_off)};
-                size_t DataLen {ntohs(packet.ip_len) - HeaderLenIPv4(packet)};
 
                 FragmentInfo& fragment = fragments[TupleToHash(packet)];
 
                 if (IsFlagMoreFragmentsSet(offset)) {
-                    fragment.currentSize += DataLen;
+                    fragment.currentSize += dataLen;
                 } else if (IsOffsetNonZero(offset)) {
-                    fragment.maxSize = offset*8 + DataLen;
-                    fragment.currentSize += DataLen;
+                    fragment.maxSize = offset*8 + dataLen;
+                    fragment.currentSize += dataLen;
                 }
 
                 if (fragment.maxSize > 0 && fragment.currentSize >= fragment.maxSize) {
-                    msg += MakeIPv4StringToPrint(packet);
+                    string src;
+                    string dst;
+                    tie(src,dst) = SrcAndDstIPv4Address(packet);
+
+                    msg += MakeIPv4StringToPrint(src, dst, packet.ip_ttl);
 
                     if (IsICMPv4(packet)) {
                         const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
                         return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
+                    }
+                    
+                    if (aggr_key == "srcip") {
+                        ++aggregations[src].packets;
+                        aggregations[src].bytes += packetLen;
+                    } else if (aggr_key == "dstip") {
+                        ++aggregations[dst].packets;
+                        aggregations[dst].bytes += packetLen;
                     }
 
                     packetL3 = SkipIPv4Header(packetL3);
                     packetType = packet.ip_p;
                 }
             } else {
-                msg += MakeIPv4StringToPrint(packet);
+                string src;
+                string dst;
+                tie(src,dst) = SrcAndDstIPv4Address(packet);
+
+                msg += MakeIPv4StringToPrint(src, dst, packet.ip_ttl);
 
                 if (IsICMPv4(packet)) {
                     const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
                     return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
+                }
+
+                if (aggr_key == "srcip") {
+                    ++aggregations[src].packets;
+                    aggregations[src].bytes += packetLen;
+                } else if (aggr_key == "dstip") {
+                    ++aggregations[dst].packets;
+                    aggregations[dst].bytes += packetLen;
                 }
 
                 packetL3 = SkipIPv4Header(packetL3);
@@ -475,8 +536,19 @@ string PacketLayer3(const uint8_t* packetL3, int packetType) {
         case Layer3::IPv6: 
         {
             const ip6_hdr& packetIP {*(ip6_hdr*)packetL3};
+            string src;
+            string dst;
+            tie(src,dst) = SrcAndDstIPv6Address(packetIP);
 
-            msg += MakeIPv6StringToPrint(packetIP);
+            if (aggr_key == "srcip") {
+                ++aggregations[src].packets;
+                aggregations[src].bytes += packetLen;
+            } else if (aggr_key == "dstip") {
+                ++aggregations[dst].packets;
+                aggregations[dst].bytes += packetLen;
+            }
+
+            msg += MakeIPv6StringToPrint(src, dst, packetIP.ip6_hlim);
             
             uint8_t next {};
             tie(next, packetL3) = SkipExtensions(packetL3);
@@ -498,22 +570,31 @@ string PacketLayer3(const uint8_t* packetL3, int packetType) {
 
     if (!IsProtocolFromL4(packetType)) return msg;
 
-    return msg + " | " + PacketLayer4(packetL3, packetType);
+    return msg + " | " + PacketLayer4(packetL3, packetType, packetLen);
 }
 
-string PrintSrcDstMAC(const uint8_t* packet) {
-    string SrcMAC;
-    string DstMAC;
-    tie(SrcMAC, DstMAC) = SrcDstMAC(packet);
-    return "Ethernet: " + SrcMAC + ' ' + DstMAC;
+string PrintSrcDstMAC(const string& srcMAC, const string& dstMAC) {
+    return "Ethernet: " + srcMAC + ' ' + dstMAC;
 }
 
-string PacketLayer2(const uint8_t* packet) {
+string PacketLayer2(const uint8_t* packet, size_t packetLen) {
     enum class Layer2 { IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
 
     string msg;
 
-    msg += PrintSrcDstMAC(packet);
+    string srcMAC;
+    string dstMAC;
+    tie(srcMAC, dstMAC) = SrcDstMAC(packet);
+
+    msg += PrintSrcDstMAC(srcMAC, dstMAC);
+
+    if (aggr_key == "srcmac") {
+        ++aggregations[srcMAC].packets;
+        aggregations[srcMAC].bytes += packetLen;
+    } else if (aggr_key == "dstmac") {
+        ++aggregations[dstMAC].packets;
+        aggregations[dstMAC].bytes += packetLen;
+    }
 
     auto packetType = EtherType(packet);
     switch (static_cast<Layer2>(packetType)) {
@@ -535,47 +616,66 @@ string PacketLayer2(const uint8_t* packet) {
     }
 
     constexpr auto ipOffset {14};
-    return msg + " | " + PacketLayer3(packet+ipOffset, packetType);
+    return msg + " | " + PacketLayer3(packet+ipOffset, packetType, packetLen);
 }
 
 string PrintHeader(const pcap_pkthdr& header) {
     return to_string(ToMicroSeconds(header.ts)) +' ' + to_string(header.len);
 }
 
-string PrintPacket( const uint8_t* packet) {
-    return PacketLayer2(packet);
-}
-
-void PrintAllPacketsInFile(const string& name ) {
-    static size_t packetsCount {1};
-
-    for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
-        // TODO: do not print fragmented packet
-        if (true) {
-            cout    << packetsCount << ": " 
-                    << PrintHeader(a.Header()) << " | " 
-                    << PrintPacket(a.Packet()) << '\n';
-        }
-    }
+string PrintPacket(const uint8_t* packet, size_t packetLen) {
+    return PacketLayer2(packet, packetLen);
 }
 
 int main(int argc, char* argv[]) {
     try {
         Arguments::Parser ap {argc, argv, "ha:s:l:f:"};
-        if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
+
+        if (print_help(ap)) return 1;
+
+        size_t llimit {0};
+        bool set {false}; 
+        tie(llimit,set) = ap.get<size_t>("-l");
     
         //print_all(ap);
+        
+        size_t packetsCount {1};
+        size_t limit {llimit};
 
-        const string& l {ap.get<string>("-l")};
-        if (!l.empty())
-            size_t limit {ap.get<size_t>("-l")};
-        else
-            cout << "Limit not set!\n";
+        {
+            bool set;
+            tie(aggr_key,set) = ap.get<string>("-a");
+        }
 
-
+        string message;
 
         for (const auto& name : ap.files()) {
-            PrintAllPacketsInFile(name);
+            for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
+                // TODO: do not print fragmented packet
+                if (true) {
+                    if (set) {
+                        if (packetsCount <= limit) {
+                            message += packetsCount + ": " 
+                                    + PrintHeader(a.Header()) + " | " 
+                                    + PrintPacket(a.Packet(), a.Header().len);
+                        } else {
+                            return 0;
+                        }
+                    } else {
+                        message += packetsCount + ": " 
+                                + PrintHeader(a.Header()) + " | " 
+                                + PrintPacket(a.Packet(), a.Header().len);
+                    }
+
+                    if (aggr_key.empty())
+                        cout << message << '\n';
+                }
+            }
+        }
+
+        if (!aggr_key.empty()) {
+            for (auto& p : aggregations)
+                cout << p.first << ": " << p.second.packets << ' ' << p.second.bytes << '\n';
         }
 
         /*

@@ -57,9 +57,13 @@ namespace PacketAnalyzer { namespace Arguments {
         return s;
     }
 
-    bool print_help(const string& msg) {
-        if (!msg.empty()) {
-            cerr << msg << '\n';
+    bool print_help(Arguments::Parser& ap) {
+        string help;
+        bool set;
+        tie(help,set) = ap.get<string>("-h");
+
+        if (set) {
+            cerr << help << '\n';
             return true;
         }
         return false;
