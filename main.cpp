@@ -546,7 +546,7 @@ string PrintPacket( const uint8_t* packet) {
     return PacketLayer2(packet);
 }
 
-void PrintAllPacketsInFile(const string& name) {
+void PrintAllPacketsInFile(const string& name ) {
     static size_t packetsCount {1};
 
     for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
@@ -565,6 +565,14 @@ int main(int argc, char* argv[]) {
         if (Arguments::print_help(ap.get<string>("-h"))) return 1; 
     
         //print_all(ap);
+
+        const string& l {ap.get<string>("-l")};
+        if (!l.empty())
+            size_t limit {ap.get<size_t>("-l")};
+        else
+            cout << "Limit set!\n";
+
+
 
         for (const auto& name : ap.files()) {
             PrintAllPacketsInFile(name);
