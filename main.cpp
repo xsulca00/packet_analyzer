@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <map>
 #include <utility>
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -61,7 +62,7 @@ namespace std {
 }
 
 struct Aggregation { size_t packets; size_t bytes; };
-unordered_map<string, Aggregation> aggregations;
+map<string, Aggregation> aggregations;
 string aggr_key;
 
 void print_all(Arguments::Parser& ap) {
@@ -634,8 +635,12 @@ int main(int argc, char* argv[]) {
         if (print_help(ap)) return 1;
 
         size_t llimit {0};
-        bool set {false}; 
-        tie(llimit,set) = ap.get<size_t>("-l");
+        bool limitSet {false}; 
+        tie(llimit,limitSet) = ap.get<size_t>("-l");
+
+        string sortBy;
+        bool sortSet {false};
+        tie(sortBy,sortSet) = ap.get<string>("-s");
     
         //print_all(ap);
         
@@ -647,34 +652,53 @@ int main(int argc, char* argv[]) {
             tie(aggr_key,set) = ap.get<string>("-a");
         }
 
-        string message;
 
+        vector<pair<string, Aggregation>> v; 
         for (const auto& name : ap.files()) {
             for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
                 // TODO: do not print fragmented packet
                 if (true) {
-                    if (set) {
+                    string message;
+                    if (limitSet) {
                         if (packetsCount <= limit) {
-                            message += packetsCount + ": " 
+                            message = to_string(packetsCount) + ": " 
                                     + PrintHeader(a.Header()) + " | " 
                                     + PrintPacket(a.Packet(), a.Header().len);
                         } else {
                             return 0;
                         }
                     } else {
-                        message += packetsCount + ": " 
+                        message = to_string(packetsCount) + ": " 
                                 + PrintHeader(a.Header()) + " | " 
                                 + PrintPacket(a.Packet(), a.Header().len);
                     }
 
-                    if (aggr_key.empty())
-                        cout << message << '\n';
+                    if (aggr_key.empty()) {
+                        auto p = make_pair(move(message), Aggregation{1, a.Header().len});
+                        v.push_back(p);
+                    }
                 }
             }
         }
 
+        {
+
+            if (sortSet) {
+                if (sortBy == "packets") {
+                    auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.packets > r.second.packets; };
+                    sort(v.begin(), v.end(), f);
+                } else if (sortBy == "bytes") {
+                    auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.bytes > r.second.bytes; };
+                    sort(v.begin(), v.end(), f);
+                }
+            }
+        }
+
+        for (const auto& p : v)
+            cout << p.first << '\n';
+
         if (!aggr_key.empty()) {
-            for (auto& p : aggregations)
+            for (auto& p : v)
                 cout << p.first << ": " << p.second.packets << ' ' << p.second.bytes << '\n';
         }
 
