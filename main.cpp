@@ -316,11 +316,11 @@ string PrintICMPv4(uint8_t type, uint8_t code) {
 
     string errorMsg;
 
-    if (!typeMsg.empty() && !codeMsg.empty()) {
-        errorMsg = ' ' + typeMsg + ' ' + codeMsg;
+    if (typeMsg.empty() || codeMsg.empty()) {
+        return "";
     }
 
-    return "ICMPv4: " + to_string(type) + ' ' + to_string(code) + errorMsg;
+    return " | ICMPv4: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
 }
 
 string PrintICMPv6(uint8_t type, uint8_t code) {
@@ -332,11 +332,11 @@ string PrintICMPv6(uint8_t type, uint8_t code) {
 
     string errorMsg;
 
-    if (!typeMsg.empty() && !codeMsg.empty()) {
-        errorMsg = ' ' + typeMsg + ' ' + codeMsg;
+    if (typeMsg.empty() || codeMsg.empty()) {
+        return "";
     }
 
-    return "ICMPv6: " + to_string(type) + ' ' + to_string(code) + errorMsg;
+    return " | ICMPv6: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
 }
 
 inline bool IsICMPv6(uint8_t next) {
@@ -502,7 +502,7 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
 
                     if (IsICMPv4(packet)) {
                         const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
-                        return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
+                        return msg + PrintICMPv4(icmp.type, icmp.code);
                     }
                     
                     if (!aggr_key.empty()) {
@@ -525,7 +525,7 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
 
                 if (IsICMPv4(packet)) {
                     const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
-                    return msg + " | " + PrintICMPv4(icmp.type, icmp.code);
+                    return msg + PrintICMPv4(icmp.type, icmp.code);
                 }
 
                 if (!aggr_key.empty()) {
@@ -568,7 +568,7 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
 
             if (IsICMPv6(next)) {
                 const icmp6_hdr& icmp {*(icmp6_hdr*)(packetL3)};
-                return msg + " | " + PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
+                return msg + PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
             }
 
             packetType = next;
@@ -598,9 +598,9 @@ string PacketLayer2(const uint8_t* packet, size_t packetLen) {
     msg += PrintSrcDstMAC(srcMAC, dstMAC);
 
     if (!aggr_key.empty()) {
-        if (aggr_key == "srcip") {
+        if (aggr_key == "srcmac") {
             addAggr(srcMAC, packetLen);
-        } else if (aggr_key == "dstip") {
+        } else if (aggr_key == "dstmac") {
             addAggr(dstMAC, packetLen);
         }
     }
@@ -642,9 +642,12 @@ int main(int argc, char* argv[]) {
 
         if (print_help(ap)) return 1;
 
+        size_t limit {numeric_limits<size_t>::max()};
         size_t llimit {0};
         bool limitSet {false}; 
         tie(llimit,limitSet) = ap.get<size_t>("-l");
+        
+        if (limitSet) limit = llimit;
 
         string sortBy;
         bool sortSet {false};
@@ -653,7 +656,6 @@ int main(int argc, char* argv[]) {
         //print_all(ap);
         
         size_t packetsCount {1};
-        size_t limit {llimit};
 
         {
             bool set;
@@ -665,28 +667,22 @@ int main(int argc, char* argv[]) {
         for (const auto& name : ap.files()) {
             for (PCAP::Analyzer a {name}; a.NextPacket(); ++packetsCount) {
                 // TODO: do not print fragmented packet
-                if (true) {
-                    string message;
-                    if (limitSet) {
-                        if (packetsCount <= limit) {
-                            message = to_string(packetsCount) + ": " 
-                                    + PrintHeader(a.Header()) + " | " 
-                                    + PrintPacket(a.Packet(), a.Header().len);
-                        } else {
-                            return 0;
-                        }
-                    } else {
-                        message = to_string(packetsCount) + ": " 
-                                + PrintHeader(a.Header()) + " | " 
-                                + PrintPacket(a.Packet(), a.Header().len);
-                    }
+                string message;
+                if (packetsCount <= limit) {
+                    message = to_string(packetsCount) + ": " 
+                              + PrintHeader(a.Header()) + " | " 
+                              + PrintPacket(a.Packet(), a.Header().len);
+                }
 
-                    if (aggr_key.empty()) {
-                        auto p = make_pair(move(message), Aggregation{1, a.Header().len});
-                        v.push_back(p);
-                    }
+                if (aggr_key.empty()) {
+                    auto p = make_pair(move(message), Aggregation{1, a.Header().len});
+                    v.push_back(p);
                 }
             }
+        }
+
+        if (!aggr_key.empty()) {
+            copy(aggregations.begin(), aggregations.end(), back_inserter(v));
         }
 
         {
@@ -701,13 +697,14 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        for (const auto& p : v)
-            cout << p.first << '\n';
-
         if (!aggr_key.empty()) {
-            for (auto& p : v)
+            for (const auto& p : v)
                 cout << p.first << ": " << p.second.packets << ' ' << p.second.bytes << '\n';
+        } else {
+            for (const auto& p : v)
+                cout << p.first << '\n';
         }
+
 
         /*
         for (const auto& p : fragments)
