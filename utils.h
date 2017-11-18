@@ -12,8 +12,9 @@ namespace PacketAnalyzer { namespace Utils {
     template<typename T, typename U>
     constexpr bool Is_same() { return is_same<T,U>::value; }
 
+
     template<typename Target = string, typename Source = string>
-    Target to(Source arg) {
+    enable_if_t<!Is_same<Target, Source>(), Target> to(Source arg) {
         stringstream s;
         Target t;
 
@@ -21,16 +22,22 @@ namespace PacketAnalyzer { namespace Utils {
         //cerr << "Target: '" << t <<  "'" << '\n';
 
         if (!(s << arg) || !(s >> t) || !(s >> ws).eof())
-            // TODO: not sure if this is correct
-            if (!Is_same<Target,Source>())
-                throw runtime_error {"to<>() failed!"};
+            throw runtime_error {"to<>() failed!"};
 
         return t;
     }
 
+    template<typename Target = string, typename Source = string>
+    enable_if_t<Is_same<Target,Source>(), Source> to(Source arg) {
+        return arg;
+    }
+
+
+    /*
     template<>
     inline string to(string arg) {
         return arg;
     }
+    */
 }}
 
