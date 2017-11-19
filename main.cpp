@@ -41,6 +41,19 @@ struct FragmentInfo {
     size_t currentSize;
 };
 
+TupleToHashForIPv4 TupleToHash(const ip& headerIPv4) {
+    return {headerIPv4.ip_src.s_addr, 
+            headerIPv4.ip_dst.s_addr, 
+            headerIPv4.ip_id};
+}
+
+inline bool IsFlagMoreFragmentsSet(uint16_t offset) { return offset & IP_MF; }
+inline bool IsOffsetNonZero(uint16_t offset) { return offset != 0; }
+inline bool IsFragmented(const ip& header) { 
+    uint16_t offset {ntohs(header.ip_off)};
+    return IsFlagMoreFragmentsSet(offset) || IsOffsetNonZero(offset); 
+}
+
 namespace std {
     template<>
     struct hash<TupleToHashForIPv4> {
@@ -61,33 +74,23 @@ namespace std {
     };
 }
 
-struct Aggregation { size_t packets; size_t bytes; };
+// pair<value, is_value_set>
+struct Options {
+    pair<string, bool> aggregation;
+    pair<string, bool> sortBy;
+    pair<size_t, bool> limit;
+    pair<string, bool> filter;
+};
 
+Options options;
+
+struct Aggregation { size_t packets; size_t bytes; };
 map<string, Aggregation> aggregations;
 
 void addAggr(const string& key, size_t size) {
     auto& p = aggregations[key];
     ++p.packets;
     p.bytes += size;
-}
-
-string aggr_key;
-
-void print_all(Arguments::Parser& ap) {
-    // typed options
-    for (const auto& s : ap.args())
-        if (!s.second.empty())
-            cout << s.first << " : " << s.second << '\n';
-
-    // file names
-    for (const auto& s : ap.files())  {
-        PCAP::PcapPtr pcap {s};
-        cout << s << '\n';
-    }
-}
-
-time_t ToMicroSeconds(const timeval& ts) {
-    return 1'000'000UL * ts.tv_sec + ts.tv_usec;
 }
 
 struct HeaderVLAN {
@@ -170,19 +173,6 @@ pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip) {
 
 string MakeIPv6StringToPrint(const string& src, const string& dst, uint8_t hopLimit) {
     return "IPv6: " + src + ' ' + dst + ' ' + to_string(hopLimit);
-}
-
-TupleToHashForIPv4 TupleToHash(const ip& headerIPv4) {
-    return {headerIPv4.ip_src.s_addr, 
-            headerIPv4.ip_dst.s_addr, 
-            headerIPv4.ip_id};
-}
-
-inline bool IsFlagMoreFragmentsSet(uint16_t offset) { return offset & IP_MF; }
-inline bool IsOffsetNonZero(uint16_t offset) { return offset != 0; }
-inline bool IsFragmented(const ip& header) { 
-    uint16_t offset {ntohs(header.ip_off)};
-    return IsFlagMoreFragmentsSet(offset) || IsOffsetNonZero(offset); 
 }
 
 inline size_t HeaderLenIPv4(const ip& header) { return header.ip_hl * 4; }
@@ -430,10 +420,11 @@ string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
             string srcPort {to_string(ntohs(tcp.th_sport))};
             string dstPort {to_string(ntohs(tcp.th_dport))};
 
-            if (!aggr_key.empty()) {
-                if (aggr_key == "srcport") {
+            if (options.aggregation.second) {
+                const string& key {options.aggregation.first};
+                if (key == "srcport") {
                     addAggr(srcPort, packetLen);
-                } else if (aggr_key == "dstport") {
+                } else if (key == "dstport") {
                     addAggr(dstPort, packetLen);
                 }
             }
@@ -450,10 +441,11 @@ string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
             string srcPort {to_string(ntohs(udp.uh_sport))};
             string dstPort {to_string(ntohs(udp.uh_dport))};
 
-            if (!aggr_key.empty()) {
-                if (aggr_key == "srcport") {
+            if (options.aggregation.second) {
+                const string& key {options.aggregation.first};
+                if (key == "srcport") {
                     addAggr(srcPort, packetLen);
-                } else if (aggr_key == "dstport") {
+                } else if (key == "dstport") {
                     addAggr(dstPort, packetLen);
                 }
             }
@@ -505,10 +497,11 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
                         return msg + PrintICMPv4(icmp.type, icmp.code);
                     }
                     
-                    if (!aggr_key.empty()) {
-                        if (aggr_key == "srcip") {
+                    if (options.aggregation.second) {
+                        const string& key {options.aggregation.first};
+                        if (key == "srcip") {
                             addAggr(src, packetLen);
-                        } else if (aggr_key == "dstip") {
+                        } else if (key == "dstip") {
                             addAggr(dst, packetLen);
                         }
                     }
@@ -528,10 +521,11 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
                     return msg + PrintICMPv4(icmp.type, icmp.code);
                 }
 
-                if (!aggr_key.empty()) {
-                    if (aggr_key == "srcip") {
+                if (options.aggregation.second) {
+                    const string& key {options.aggregation.first};
+                    if (key == "srcip") {
                         addAggr(src, packetLen);
-                    } else if (aggr_key == "dstip") {
+                    } else if (key == "dstip") {
                         addAggr(dst, packetLen);
                     }
                 }
@@ -549,10 +543,11 @@ string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
             string dst;
             tie(src,dst) = SrcAndDstIPv6Address(packetIP);
 
-            if (!aggr_key.empty()) {
-                if (aggr_key == "srcip") {
+            if (options.aggregation.second) {
+                const string& key {options.aggregation.first};
+                if (key == "srcip") {
                     addAggr(src, packetLen);
-                } else if (aggr_key == "dstip") {
+                } else if (key == "dstip") {
                     addAggr(dst, packetLen);
                 }
             }
@@ -597,10 +592,11 @@ string PacketLayer2(const uint8_t* packet, size_t packetLen) {
 
     msg += PrintSrcDstMAC(srcMAC, dstMAC);
 
-    if (!aggr_key.empty()) {
-        if (aggr_key == "srcmac") {
+    if (options.aggregation.second) {
+        const string& key {options.aggregation.first};
+        if (key == "srcmac") {
             addAggr(srcMAC, packetLen);
-        } else if (aggr_key == "dstmac") {
+        } else if (key == "dstmac") {
             addAggr(dstMAC, packetLen);
         }
     }
@@ -629,11 +625,17 @@ string PacketLayer2(const uint8_t* packet, size_t packetLen) {
 }
 
 string PrintHeader(const pcap_pkthdr& header) {
-    return to_string(ToMicroSeconds(header.ts)) +' ' + to_string(header.len);
+    return to_string(PacketAnalyzer::Utils::ToMicroSeconds(header.ts)) +' ' + to_string(header.len);
 }
 
 string PrintPacket(const uint8_t* packet, size_t packetLen) {
     return PacketLayer2(packet, packetLen);
+}
+
+string PacketDissection(size_t n, const pcap_pkthdr& header, const uint8_t* packet) {
+    return to_string(n) + ": " + 
+           PrintHeader(header) + " | " +
+           PrintPacket(packet, header.len);
 }
 
 int main(int argc, char* argv[]) {
@@ -642,73 +644,55 @@ int main(int argc, char* argv[]) {
 
         if (print_help(ap)) return 1;
 
-        size_t limit {numeric_limits<size_t>::max()};
-        size_t llimit {0};
-        bool limitSet {false}; 
-        tie(llimit,limitSet) = ap.get<size_t>("-l");
-        
-        if (limitSet) limit = llimit;
+        options.aggregation = ap.get<string>("-a");
+        options.sortBy      = ap.get<string>("-s");
+        options.limit       = ap.get<size_t>("-l");
+        options.filter      = ap.get<string>("-f");
 
-        string sortBy;
-        bool sortSet {false};
-        tie(sortBy,sortSet) = ap.get<string>("-s");
-    
-        //print_all(ap);
-        
+        size_t limit {numeric_limits<size_t>::max()};
+        if (options.limit.second) limit = options.limit.first;
+
         size_t packetsCount {1};
 
-        {
-            bool set;
-            tie(aggr_key,set) = ap.get<string>("-a");
-        }
-
         vector<pair<string, Aggregation>> v; 
-        for (const auto& name : ap.files()) {
-            for (PCAP::Analyzer a {name, ap.get<string>("-f").first}; a.NextPacket(); ++packetsCount) {
-                // TODO: do not print fragmented packet
-                string message;
-                if (packetsCount <= limit) {
-                    message = to_string(packetsCount) + ": " 
-                              + PrintHeader(a.Header()) + " | " 
-                              + PrintPacket(a.Packet(), a.Header().len);
-                }
 
-                if (aggr_key.empty()) {
-                    auto p = make_pair(move(message), Aggregation{1, a.Header().len});
-                    v.push_back(p);
+        for (const auto& name : ap.files()) {
+            for (PCAP::Analyzer a {name, options.filter.first}; a.NextPacket(); ++packetsCount) {
+                // TODO: do not print fragmented packet
+                if (packetsCount <= limit) {
+                    if (!options.aggregation.second) {
+                        auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 
+                                           Aggregation{1, a.Header().len});
+                        v.push_back(p);
+                    } else {
+                        PacketDissection(packetsCount, a.Header(), a.Packet());
+                    }
                 }
             }
         }
 
-        if (!aggr_key.empty()) {
+        if (options.aggregation.second) {
             copy(aggregations.begin(), aggregations.end(), back_inserter(v));
         }
 
-        {
-            if (sortSet) {
-                if (sortBy == "packets") {
-                    auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.packets > r.second.packets; };
-                    sort(v.begin(), v.end(), f);
-                } else if (sortBy == "bytes") {
-                    auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.bytes > r.second.bytes; };
-                    sort(v.begin(), v.end(), f);
-                }
+        if (options.sortBy.second) {
+            const string& sortBy = options.sortBy.first;
+            if (sortBy == "packets") {
+                auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.packets > r.second.packets; };
+                sort(v.begin(), v.end(), f);
+            } else if (sortBy == "bytes") {
+                auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.bytes > r.second.bytes; };
+                sort(v.begin(), v.end(), f);
             }
         }
 
-        if (!aggr_key.empty()) {
+        if (options.aggregation.second) {
             for (const auto& p : v)
                 cout << p.first << ": " << p.second.packets << ' ' << p.second.bytes << '\n';
         } else {
             for (const auto& p : v)
                 cout << p.first << '\n';
         }
-
-
-        /*
-        for (const auto& p : fragments)
-            cout << p.second.maxSize << " : " <<p.second.currentSize << '\n';
-            */
     } catch (Arguments::Parser::BadArgsStructure) {
         // no message because getopt writes error by itself
         return 2;

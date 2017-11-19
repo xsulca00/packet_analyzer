@@ -32,6 +32,9 @@ namespace PacketAnalyzer { namespace Utils {
         return arg;
     }
 
+    inline time_t ToMicroSeconds(const timeval& ts) {
+        return 1'000'000UL * ts.tv_sec + ts.tv_usec;
+    }
 
     /*
     template<>
