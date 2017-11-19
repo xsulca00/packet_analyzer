@@ -5,8 +5,10 @@
 
 extern "C" {
 #include <netinet/ip.h>
+#include <netinet/if_ether.h>
 #include <netinet/ip6.h>
 #include <netinet/ip_icmp.h>
+#include <netinet/icmp6.h>
 #include <arpa/inet.h>
 }
 
@@ -22,10 +24,14 @@ namespace packet_analyzer::layer3 {
     string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
         enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6, ICMPv4 = 1 };
 
+        using arguments::addAggr;
+
         string msg;
 
         string SrcIP;
         string DstIP;
+
+        using arguments::options;
 
         switch(static_cast<Layer3>(packetType)) {
             case Layer3::IPv4:
@@ -135,7 +141,7 @@ namespace packet_analyzer::layer3 {
 
         if (!IsProtocolFromL4(packetType)) return msg;
 
-        return msg + " | " + PacketLayer4(packetL3, packetType, packetLen);
+        return msg + " | " + layer4::PacketLayer4(packetL3, packetType, packetLen);
     }
 
     bool IsFlagMoreFragmentsSet(uint16_t offset) { return offset & IP_MF; }
@@ -163,23 +169,6 @@ namespace packet_analyzer::layer3 {
     }
 
     bool IsICMPv4(const ip& ip) { return ip.ip_p == 1; }
-    const uint8_t* SkipIPv4Header(const uint8_t* packetL3) { return packetL3 + HeaderLenIPv4(*(ip*)packetL3); }
-
-    string PrintICMPv4(uint8_t type, uint8_t code) {
-        static ICMPv4ErrorMessages ICMPv4Messages;
-
-        string typeMsg;
-        string codeMsg;
-        tie(typeMsg, codeMsg) = ICMPv4Messages.MessageFor(type, code);
-
-        string errorMsg;
-
-        if (typeMsg.empty() || codeMsg.empty()) {
-            return "";
-        }
-
-        return " | ICMPv4: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
-    }
 
     pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip) {
         array<char, INET6_ADDRSTRLEN> buf;

@@ -1,10 +1,12 @@
 #include <utility>
+#include <map>
 
 #include "arguments.h"
 #include "utils.h"
 
 namespace packet_analyzer::arguments {
     Options options {};
+    map<string, Aggregation> aggregations {};
 
     Parser::Parser(int argc, char* argv[], const char* arguments) {
         if (argc <= 0) throw BadArgsNum{};
@@ -69,5 +71,11 @@ namespace packet_analyzer::arguments {
             return true;
         }
         return false;
+    }
+
+    void addAggr(const string& key, size_t size) {
+        auto& p = aggregations[key];
+        ++p.packets;
+        p.bytes += size;
     }
 }

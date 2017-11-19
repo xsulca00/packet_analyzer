@@ -17,6 +17,9 @@ namespace packet_analyzer::layer4 {
     string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
         enum class Layer4 { TCP = 6, UDP = 17 };
 
+        using arguments::options;
+        using arguments::addAggr;
+
         switch (static_cast<Layer4>(packetType)) {
             case Layer4::TCP:
             {

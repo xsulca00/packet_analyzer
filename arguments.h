@@ -7,6 +7,7 @@ extern "C" {
 #include <iostream>
 #include <unordered_map>
 #include <string>
+#include <map>
 #include <vector>
 
 #include "utils.h"
@@ -22,7 +23,11 @@ namespace packet_analyzer::arguments {
         pair<string, bool> filter;
     };
 
-    Options options;
+    extern Options options;
+
+    struct Aggregation { size_t packets; size_t bytes; };
+    extern map<string, Aggregation> aggregations;
+    void addAggr(const string& key, size_t size);
 
     class Parser {
     public:

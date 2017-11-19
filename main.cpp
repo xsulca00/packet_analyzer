@@ -1,15 +1,12 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
-#include <map>
 #include <utility>
 #include <algorithm>
-#include <cstring>
-#include <sstream>
-#include <iomanip>
 #include <limits>
 
 extern "C" {
+#include <pcap.h>
 #include <netinet/if_ether.h> 
 #include <netinet/ether.h> 
 #include <netinet/ip.h> 
@@ -25,22 +22,10 @@ extern "C" {
 #include "utils.h"
 #include "arguments.h"
 #include "analyzer.h"
-#include "pcap_ptr.h"
 #include "layer2/ethernet.h"
-#include "layer3/ip.h"
-#include "layer4/dissection.h"
 
 using namespace packet_analyzer;
 using namespace std;
-
-struct Aggregation { size_t packets; size_t bytes; };
-map<string, Aggregation> aggregations;
-
-void addAggr(const string& key, size_t size) {
-    auto& p = aggregations[key];
-    ++p.packets;
-    p.bytes += size;
-}
 
 string PrintHeader(const pcap_pkthdr& header) {
     return to_string(utils::ToMicroSeconds(header.ts)) +' ' + to_string(header.len);
@@ -54,11 +39,13 @@ string PacketDissection(size_t n, const pcap_pkthdr& header, const uint8_t* pack
 
 int main(int argc, char* argv[]) {
     try {
+
         arguments::Parser ap {argc, argv, "ha:s:l:f:"};
 
         if (PrintHelp(ap)) return 1;
 
         using arguments::options;
+        using arguments::Aggregation;
 
         options.aggregation = ap.get<string>("-a");
         options.sortBy      = ap.get<string>("-s");
@@ -88,6 +75,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (options.aggregation.second) {
+            using arguments::aggregations;
             copy(aggregations.begin(), aggregations.end(), back_inserter(v));
         }
 

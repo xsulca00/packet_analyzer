@@ -2,7 +2,9 @@
 
 #include <string>
 #include <utility>
+#include <vector>
 #include <map>
+#include <unordered_map>
 
 extern "C" {
 #include <netinet/ip.h>
@@ -22,7 +24,6 @@ namespace packet_analyzer::layer3 {
         size_t maxSize;
         size_t currentSize;
     };
-
 }
 
 namespace std {
@@ -121,7 +122,7 @@ namespace packet_analyzer::layer3 {
         map<int, pair<string, vector<string>>> errorMsgICMPv6;
     };
 
-    unordered_map<TupleToHashForIPv4, FragmentInfo> fragments;
+    extern unordered_map<TupleToHashForIPv4, FragmentInfo> fragments;
 
     enum class UpperLayerIPv6 { TCP = 6, UDP = 17, ICMPv6 = 58  };
     enum class ExtensionsIPv6 { HopByHop = 0,
@@ -155,3 +156,4 @@ namespace packet_analyzer::layer3 {
     const uint8_t* SkipICMPv4Header(const uint8_t* packetL3);
     const uint8_t* SkipICMPv6Header(const uint8_t* packetL3);
     const uint8_t* SkipIPv4Header(const uint8_t* packetL3);
+}

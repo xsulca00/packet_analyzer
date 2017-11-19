@@ -1,12 +1,14 @@
 #include <string>
 #include <tuple>
 #include <utility>
+#include <iomanip>
 #include <stdexcept>
 #include <sstream>
 
 extern "C" {
 #include <netinet/if_ether.h>
 #include <netinet/ether.h>
+#include <arpa/inet.h>
 }
 
 #include "ethernet.h"
@@ -18,6 +20,9 @@ namespace packet_analyzer::layer2 {
     string PacketLayer2(const uint8_t* packet, size_t packetLen) {
         enum class Layer2 { IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
 
+        using arguments::options;
+        using arguments::addAggr;
+
         string msg;
 
         string srcMAC;
@@ -25,6 +30,7 @@ namespace packet_analyzer::layer2 {
         tie(srcMAC, dstMAC) = SrcDstMAC(packet);
 
         msg += PrintSrcDstMAC(srcMAC, dstMAC);
+
 
         if (options.aggregation.second) {
             const string& key {options.aggregation.first};
@@ -55,7 +61,7 @@ namespace packet_analyzer::layer2 {
         }
 
         constexpr auto ipOffset {14};
-        return msg + " | " + PacketLayer3(packet+ipOffset, packetType, packetLen);
+        return msg + " | " + layer3::PacketLayer3(packet+ipOffset, packetType, packetLen);
     }
 
     pair<string, string> SrcDstMAC(const uint8_t* packet) {
