@@ -23,6 +23,8 @@ namespace packet_analyzer::pcap {
                 throw runtime_error{"PcapFilter::pcap_setfilter() failed to set compiled filter: " + filter};
             }
         }
+
+        ~PcapFilter() { pcap_freecode(&compiledFilter); }
     private:
         bpf_program compiledFilter;
     };

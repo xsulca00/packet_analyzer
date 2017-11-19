@@ -1,4 +1,5 @@
 #include <utility>
+#include <unordered_map>
 #include <map>
 
 #include "arguments.h"
@@ -27,7 +28,7 @@ namespace packet_analyzer::arguments {
         for(int i {optind}; i != argc; ++i)
             fileNames.emplace_back(argv[i]);
 
-        if (fileNames.empty()) throw runtime_error{"No files specified!"};
+        if (options["-h"].empty() && fileNames.empty()) throw runtime_error{"No files specified!"};
     }
     
     string Parser::aggr_key(const string& s) const {
@@ -59,18 +60,6 @@ namespace packet_analyzer::arguments {
     string Parser::filter_expression(const string& s) const {
         // TODO: check filter syntax
         return s;
-    }
-
-    bool PrintHelp(Parser& ap) {
-        string help;
-        bool set;
-        tie(help,set) = ap.get<string>("-h");
-
-        if (set) {
-            cerr << help << '\n';
-            return true;
-        }
-        return false;
     }
 
     void addAggr(const string& key, size_t size) {

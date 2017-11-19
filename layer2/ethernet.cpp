@@ -15,6 +15,7 @@ extern "C" {
 #include "vlan.h"
 #include "../arguments.h"
 #include "../layer3/ip.h"
+#include "../utils.h"
 
 namespace packet_analyzer::layer2 {
     string PacketLayer2(const uint8_t* packet, size_t packetLen) {
@@ -24,13 +25,13 @@ namespace packet_analyzer::layer2 {
         using arguments::addAggr;
 
         string msg;
+        const ether_header& ether {*reinterpret_cast<const ether_header*>(packet)};
 
         string srcMAC;
         string dstMAC;
-        tie(srcMAC, dstMAC) = SrcDstMAC(packet);
+        tie(srcMAC, dstMAC) = SrcDstMAC(ether);
 
         msg += PrintSrcDstMAC(srcMAC, dstMAC);
-
 
         if (options.aggregation.second) {
             const string& key {options.aggregation.first};
@@ -41,7 +42,7 @@ namespace packet_analyzer::layer2 {
             }
         }
 
-        auto packetType = EtherType(packet);
+        auto packetType = ntohs(ether.ether_type);
         switch (static_cast<Layer2>(packetType)) {
             case Layer2::IEEE_802_1q:
             {
@@ -57,18 +58,17 @@ namespace packet_analyzer::layer2 {
                 tie(packet, packetType) = SkipVLAN(packet);
                 break;
             }
-            default: runtime_error{"Unknown frame type: " + to_string(packetType)};
+            default: utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(packetType)};
         }
 
         constexpr auto ipOffset {14};
-        return msg + " | " + layer3::PacketLayer3(packet+ipOffset, packetType, packetLen);
+        packet = next(packet, ipOffset);
+        return msg + " | " + layer3::PacketLayer3(packet, packetType, packetLen);
     }
 
-    pair<string, string> SrcDstMAC(const uint8_t* packet) {
-        const ether_header* eptr {reinterpret_cast<const ether_header*>(packet)};
-
-        string SrcMAC {PrintMAC((const ether_addr*)(&eptr->ether_shost))};
-        string DstMAC {PrintMAC((const ether_addr*)(&eptr->ether_dhost))};
+    pair<string, string> SrcDstMAC(const ether_header& ether) {
+        string SrcMAC {PrintMAC(*reinterpret_cast<const ether_addr*>(&ether.ether_shost))};
+        string DstMAC {PrintMAC(*reinterpret_cast<const ether_addr*>(&ether.ether_dhost))};
 
         return make_pair(SrcMAC, DstMAC);
     }
@@ -77,13 +77,8 @@ namespace packet_analyzer::layer2 {
         return "Ethernet: " + srcMAC + ' ' + dstMAC;
     }
 
-    int EtherType(const uint8_t* packet) {
-        const ether_header* eptr {reinterpret_cast<const ether_header*>(packet)};
-        return ntohs(eptr->ether_type);
-    }
-
-    string PrintMAC(const ether_addr* mac) {
-        const uint8_t* octets {&mac->ether_addr_octet[0]};
+    string PrintMAC(const ether_addr& mac) {
+        const uint8_t* octets {&mac.ether_addr_octet[0]};
 
         ostringstream ss;
         ss.fill('0');

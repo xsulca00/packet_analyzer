@@ -15,6 +15,7 @@ extern "C" {
 #include "ip.h"
 #include "../layer4/dissection.h"
 #include "../arguments.h"
+#include "../utils.h"
 
 namespace packet_analyzer::layer3 {
     using namespace std;
@@ -105,10 +106,11 @@ namespace packet_analyzer::layer3 {
             }
             case Layer3::IPv6:
             {
-                const ip6_hdr& packetIP {*(ip6_hdr*)packetL3};
+                const ip6_hdr& ip {*(ip6_hdr*)packetL3};
+
                 string src;
                 string dst;
-                tie(src,dst) = SrcAndDstIPv6Address(packetIP);
+                tie(src,dst) = SrcAndDstIPv6Address(ip);
 
                 if (options.aggregation.second) {
                     const string& key {options.aggregation.first};
@@ -119,7 +121,7 @@ namespace packet_analyzer::layer3 {
                     }
                 }
 
-                msg += MakeIPv6StringToPrint(src, dst, packetIP.ip6_hlim);
+                msg += MakeIPv6StringToPrint(src, dst, ip.ip6_hlim);
 
                 uint8_t next {};
                 tie(next, packetL3) = SkipExtensions(packetL3);
@@ -136,7 +138,7 @@ namespace packet_analyzer::layer3 {
                 packetType = next;
                 break;
             }
-            default: throw runtime_error{"Layer3: Unknown packet type: " + to_string(packetType)};
+            default: throw utils::BadProtocolType{"Layer3: Unknown protocol type: " + to_string(packetType)};
         }
 
         if (!IsProtocolFromL4(packetType)) return msg;
@@ -183,14 +185,6 @@ namespace packet_analyzer::layer3 {
         return "IPv6: " + src + ' ' + dst + ' ' + to_string(hopLimit);
     }
 
-    bool IsIPv6Extension(uint8_t number) {
-        ExtensionsIPv6 n {static_cast<ExtensionsIPv6>(number)};
-        return n == ExtensionsIPv6::HopByHop ||
-               n == ExtensionsIPv6::Routing ||
-               n == ExtensionsIPv6::DestinationOptions ||
-               n == ExtensionsIPv6::NoNextHeader;
-    }
-
     bool IsProtocolFromL4(uint8_t number) {
         UpperLayerIPv6 n {static_cast<UpperLayerIPv6>(number)};
         return n == UpperLayerIPv6::TCP ||
@@ -199,20 +193,18 @@ namespace packet_analyzer::layer3 {
     }
 
     pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet) {
-        ip6_hdr& packetIP {*(ip6_hdr*)packet};
-        uint8_t next {packetIP.ip6_nxt};
-        const uint8_t* p {packet + HeaderLenIPv6()};
+        const ip6_hdr& ip {*reinterpret_cast<const ip6_hdr*>(packet)};
+        uint8_t next {ip.ip6_nxt};
+        const uint8_t* p {std::next(packet, HeaderLenIPv6())};
 
-        const ip6_ext* e {(ip6_ext*)p};
+        const ip6_ext* e {reinterpret_cast<const ip6_ext*>(p)};
 
         for (; !IsProtocolFromL4(next);) {
-            // cout << " next: " << unsigned{next} << ' ';
             next = e->ip6e_nxt;
             p += (e->ip6e_len + 1)*8;
-            e = (ip6_ext*)p;
+            e = reinterpret_cast<const ip6_ext*>(p);
         }
 
-        // cout << " next: " << unsigned{next} << '\n';
         return make_pair(next, p);
     }
 
@@ -222,8 +214,6 @@ namespace packet_analyzer::layer3 {
         string typeMsg;
         string codeMsg;
         tie(typeMsg, codeMsg) = ICMPv4Messages.MessageFor(type, code);
-
-        string errorMsg;
 
         if (typeMsg.empty() || codeMsg.empty()) {
             return "";
@@ -238,8 +228,6 @@ namespace packet_analyzer::layer3 {
         string typeMsg;
         string codeMsg;
         tie(typeMsg, codeMsg) = ICMPv6Messages.MessageFor(type, code);
-
-        string errorMsg;
 
         if (typeMsg.empty() || codeMsg.empty()) {
             return "";

@@ -12,6 +12,7 @@ extern "C" {
 #include "dissection.h"
 #include "tcp.h"
 #include "../arguments.h"
+#include "../utils.h"
 
 namespace packet_analyzer::layer4 {
     string PacketLayer4(const uint8_t* packetL4, int packetType, size_t packetLen) {
@@ -23,7 +24,7 @@ namespace packet_analyzer::layer4 {
         switch (static_cast<Layer4>(packetType)) {
             case Layer4::TCP:
             {
-                const tcphdr& tcp {*(tcphdr*)packetL4};
+                const tcphdr& tcp {*reinterpret_cast<const tcphdr*>(packetL4)};
 
                 string srcPort {to_string(ntohs(tcp.th_sport))};
                 string dstPort {to_string(ntohs(tcp.th_dport))};
@@ -44,7 +45,7 @@ namespace packet_analyzer::layer4 {
             }
             case Layer4::UDP:
             {
-                const udphdr& udp {*(udphdr*)packetL4};
+                const udphdr& udp {*reinterpret_cast<const udphdr*>(packetL4)};
 
                 string srcPort {to_string(ntohs(udp.uh_sport))};
                 string dstPort {to_string(ntohs(udp.uh_dport))};
@@ -62,7 +63,7 @@ namespace packet_analyzer::layer4 {
                 ss << "UDP: " << srcPort << ' ' << dstPort;
                 return ss.str();
             }
-            default: throw runtime_error{"Layer4: Unknown packet type: " + to_string(packetType)};
+            default: throw utils::BadProtocolType{"Layer4: Unknown protocol type: " + to_string(packetType)};
         }
     }
 }

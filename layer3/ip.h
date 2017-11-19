@@ -3,7 +3,6 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <map>
 #include <unordered_map>
 
 extern "C" {
@@ -86,7 +85,7 @@ namespace packet_analyzer::layer3 {
             return make_pair("", "");
         }
     private:
-        map<int, pair<string, vector<string>>> errorMsgICMPv4;
+        unordered_map<int, pair<string, vector<string>>> errorMsgICMPv4;
     };
 
     class ICMPv6ErrorMessages {
@@ -119,7 +118,7 @@ namespace packet_analyzer::layer3 {
             return make_pair("", "");
         }
     private:
-        map<int, pair<string, vector<string>>> errorMsgICMPv6;
+        unordered_map<int, pair<string, vector<string>>> errorMsgICMPv6;
     };
 
     extern unordered_map<TupleToHashForIPv4, FragmentInfo> fragments;
@@ -145,7 +144,6 @@ namespace packet_analyzer::layer3 {
     string PrintICMPv4(uint8_t type, uint8_t code);
     pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip);
     string MakeIPv6StringToPrint(const string& src, const string& dst, uint8_t hopLimit);
-    bool IsIPv6Extension(uint8_t number);
     constexpr size_t HeaderLenIPv6() { return sizeof(ip6_hdr); }
     bool IsProtocolFromL4(uint8_t number);
     pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet);

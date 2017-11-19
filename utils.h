@@ -9,6 +9,11 @@
 namespace packet_analyzer::utils {
     using namespace std;
 
+    struct BadProtocolType : runtime_error {
+        explicit BadProtocolType(const string& s) : runtime_error{s} {}
+    };
+
+
     template<typename T, typename U>
     constexpr bool Is_same() { return is_same<T,U>::value; }
 

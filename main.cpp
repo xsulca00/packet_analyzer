@@ -39,18 +39,21 @@ string PacketDissection(size_t n, const pcap_pkthdr& header, const uint8_t* pack
 
 int main(int argc, char* argv[]) {
     try {
-
         arguments::Parser ap {argc, argv, "ha:s:l:f:"};
-
-        if (PrintHelp(ap)) return 1;
 
         using arguments::options;
         using arguments::Aggregation;
 
+        options.help        = ap.get<string>("-h");
         options.aggregation = ap.get<string>("-a");
         options.sortBy      = ap.get<string>("-s");
         options.limit       = ap.get<size_t>("-l");
         options.filter      = ap.get<string>("-f");
+
+        if (options.help.second) {
+            cerr << options.help.first << '\n';
+            return 1;
+        }
 
         size_t limit {numeric_limits<size_t>::max()};
         if (options.limit.second) limit = options.limit.first;
@@ -63,12 +66,16 @@ int main(int argc, char* argv[]) {
             for (pcap::Analyzer a {name, options.filter.first}; a.NextPacket(); ++packetsCount) {
                 // TODO: do not print fragmented packet
                 if (packetsCount <= limit) {
-                    if (!options.aggregation.second) {
-                        auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 
-                                           Aggregation{1, a.Header().len});
-                        v.push_back(p);
-                    } else {
-                        PacketDissection(packetsCount, a.Header(), a.Packet());
+                    try {
+                        if (!options.aggregation.second) {
+                            auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 
+                                               Aggregation{1, a.Header().len});
+                            v.push_back(p);
+                        } else {
+                            PacketDissection(packetsCount, a.Header(), a.Packet());
+                        }
+                    } catch (const utils::BadProtocolType bpt) {
+                        cerr << bpt.what() << '\n';
                     }
                 }
             }

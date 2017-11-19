@@ -15,8 +15,10 @@ extern "C" {
 namespace packet_analyzer::arguments {
     using namespace std;
 
-    // pair<value, is_value_set>
+    // .first - value
+    // .second - is set
     struct Options {
+        pair<string, bool> help;
         pair<string, bool> aggregation;
         pair<string, bool> sortBy;
         pair<size_t, bool> limit;
@@ -27,6 +29,7 @@ namespace packet_analyzer::arguments {
 
     struct Aggregation { size_t packets; size_t bytes; };
     extern map<string, Aggregation> aggregations;
+
     void addAggr(const string& key, size_t size);
 
     class Parser {
@@ -74,11 +77,9 @@ namespace packet_analyzer::arguments {
             "-f filter-expression   Program zpracuje pouze pakety,\n"
             "                       které vyhovují filtru danému řetězcem filter-expression\n"
             "file                   Cesta k souboru ve formátu pcap (čitelný knihovnou libpcap).\n"
-            "                       Možné je zadat jeden a více souborů.\n";
+            "                       Možné je zadat jeden a více souborů.";
 
         unordered_map<string, string> options;
         vector<string> fileNames;
     };
-
-    bool PrintHelp(Parser& ap);
 }
