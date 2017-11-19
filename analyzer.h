@@ -9,7 +9,7 @@ extern "C" {
 
 #include "pcap_ptr.h"
 
-namespace PacketAnalyzer { namespace PCAP {
+namespace packet_analyzer::pcap {
     using namespace std;
 
     class PcapFilter {
@@ -51,4 +51,4 @@ namespace PacketAnalyzer { namespace PCAP {
         PcapPtr pcapFile;
         PcapFilter pcapFilter;
     };
-}}
+}

@@ -6,20 +6,16 @@
 #include <type_traits> 
 #include <iostream>
 
-namespace PacketAnalyzer { namespace Utils {
+namespace packet_analyzer::utils {
     using namespace std;
 
     template<typename T, typename U>
     constexpr bool Is_same() { return is_same<T,U>::value; }
 
-
     template<typename Target = string, typename Source = string>
     enable_if_t<!Is_same<Target, Source>(), Target> to(Source arg) {
         stringstream s;
         Target t;
-
-        //cerr << "Source: '" << arg << "'" << '\n';
-        //cerr << "Target: '" << t <<  "'" << '\n';
 
         if (!(s << arg) || !(s >> t) || !(s >> ws).eof())
             throw runtime_error {"to<>() failed!"};
@@ -35,12 +31,5 @@ namespace PacketAnalyzer { namespace Utils {
     inline time_t ToMicroSeconds(const timeval& ts) {
         return 1'000'000UL * ts.tv_sec + ts.tv_usec;
     }
-
-    /*
-    template<>
-    inline string to(string arg) {
-        return arg;
-    }
-    */
-}}
+}
 

@@ -11,8 +11,18 @@ extern "C" {
 
 #include "utils.h"
 
-namespace PacketAnalyzer { namespace Arguments {
+namespace packet_analyzer::arguments {
     using namespace std;
+
+    // pair<value, is_value_set>
+    struct Options {
+        pair<string, bool> aggregation;
+        pair<string, bool> sortBy;
+        pair<size_t, bool> limit;
+        pair<string, bool> filter;
+    };
+
+    Options options;
 
     class Parser {
     public:
@@ -27,7 +37,7 @@ namespace PacketAnalyzer { namespace Arguments {
         pair<T,bool> get(const string& s) { 
             const auto& o = options[s];
             if (o.empty()) return make_pair(T{}, false);
-            return make_pair(Utils::to<T>(o), !o.empty());
+            return make_pair(utils::to<T>(o), !o.empty());
         }
 
         const vector<string>& files() const { return fileNames; }
@@ -65,5 +75,5 @@ namespace PacketAnalyzer { namespace Arguments {
         vector<string> fileNames;
     };
 
-    bool print_help(Arguments::Parser& ap);
-}}
+    bool PrintHelp(Parser& ap);
+}

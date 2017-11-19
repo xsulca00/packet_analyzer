@@ -8,7 +8,7 @@ extern "C" {
 #include <pcap.h>
 }
 
-namespace PacketAnalyzer { namespace PCAP {
+namespace packet_analyzer::pcap {
     using namespace std;
 
     class PcapPtr {
@@ -26,4 +26,4 @@ namespace PacketAnalyzer { namespace PCAP {
         array<char, PCAP_ERRBUF_SIZE> errbuf;
         pcap_t* handle;
     };
-}}
+}

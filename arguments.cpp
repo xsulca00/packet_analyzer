@@ -3,7 +3,9 @@
 #include "arguments.h"
 #include "utils.h"
 
-namespace PacketAnalyzer { namespace Arguments {
+namespace packet_analyzer::arguments {
+    Options options {};
+
     Parser::Parser(int argc, char* argv[], const char* arguments) {
         if (argc <= 0) throw BadArgsNum{};
 
@@ -44,7 +46,7 @@ namespace PacketAnalyzer { namespace Arguments {
 
     string Parser::limit(const string& s) const {
         try { 
-            Utils::to<unsigned>(s); 
+            utils::to<unsigned>(s); 
         } catch(const runtime_error&) { 
             throw runtime_error {"Invalid limit number: " + s}; 
         }
@@ -57,7 +59,7 @@ namespace PacketAnalyzer { namespace Arguments {
         return s;
     }
 
-    bool print_help(Arguments::Parser& ap) {
+    bool PrintHelp(Parser& ap) {
         string help;
         bool set;
         tie(help,set) = ap.get<string>("-h");
@@ -68,4 +70,4 @@ namespace PacketAnalyzer { namespace Arguments {
         }
         return false;
     }
-}}
+}
