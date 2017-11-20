@@ -95,16 +95,10 @@ namespace packet_analyzer::layer3 {
 
 
     string Layer3(const uint8_t* packetL3, int type, size_t size);
-    size_t HeaderLenIPv4(const ip* header); 
-    string PrintICMPv4(uint8_t type, uint8_t code);
-    pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip);
-    constexpr size_t HeaderLenIPv6() { return sizeof(ip6_hdr); }
+    size_t IPv4HeaderSize(const ip* header); 
+    size_t IPv6HeaderSize(); 
     bool IsL4Protocol(uint8_t number);
-    pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet);
+    pair<uint8_t, const uint8_t*> SkipAllIPv6Extensions(uint8_t next, const uint8_t* packet);
     string PrintICMPv4(uint8_t type, uint8_t code);
     string PrintICMPv6(uint8_t type, uint8_t code);
-    bool IsICMPv6(uint8_t next);
-    bool NoNextProtocol(uint8_t next);
-    const uint8_t* SkipICMPv4Header(const uint8_t* packetL3);
-    const uint8_t* SkipICMPv6Header(const uint8_t* packetL3);
 }
