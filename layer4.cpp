@@ -3,6 +3,8 @@
 #include <stdexcept>
 #include <utility>
 
+#define __FAVOR_BSD
+
 extern "C" {
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
