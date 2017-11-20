@@ -10,10 +10,8 @@ extern "C" {
 namespace packet_analyzer::layer2 {
     using namespace std;
 
-    string PacketLayer2(const uint8_t* packet, size_t packetLen);
-    pair<string, string> SrcDstMAC(const ether_header& ether);
-    string PrintSrcDstMAC(const string& srcMAC, const string& dstMAC);
-    string PrintMAC(const ether_addr& mac);
+    string Layer2(const uint8_t* packet, size_t size);
+    string MACtoString(const ether_addr* mac);
 
     namespace vlan {
         struct Tci {

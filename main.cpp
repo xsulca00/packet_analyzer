@@ -34,7 +34,7 @@ string PrintHeader(const pcap_pkthdr& header) {
 string PacketDissection(size_t n, const pcap_pkthdr& header, const uint8_t* packet) {
     return to_string(n) + ": " + 
            PrintHeader(header) + " | " +
-           layer2::PacketLayer2(packet, header.len);
+           layer2::Layer2(packet, header.len);
 }
 
 int main(int argc, char* argv[]) {

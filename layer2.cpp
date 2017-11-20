@@ -17,100 +17,94 @@ extern "C" {
 #include "utils.h"
 
 namespace packet_analyzer::layer2 {
-    string PacketLayer2(const uint8_t* packet, size_t packetLen) {
-        enum class Layer2 { IPv4 = 0x0800, IPv6 = 0x86DD, IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
+    string Layer2(const uint8_t* packet, size_t size) {
+        enum Layer2 { IPv4 = 0x0800, IPv6 = 0x86DD, IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
 
         using arguments::options;
         using arguments::addAggr;
 
         string msg;
-        const ether_header& ether {*reinterpret_cast<const ether_header*>(packet)};
+        const ether_header* ether = (const ether_header*)packet;
+        const size_t SkipToEtherType = 12;
+        const size_t SkipToIP = 2;
 
-        string srcMAC;
-        string dstMAC;
-        tie(srcMAC, dstMAC) = SrcDstMAC(ether);
+        string srcMAC = MACtoString((const ether_addr*)(&ether->ether_shost));
+        string dstMAC = MACtoString((const ether_addr*)(&ether->ether_dhost));
 
-        msg += PrintSrcDstMAC(srcMAC, dstMAC);
+        msg += "Ethernet: " + srcMAC + ' ' + dstMAC;
 
         if (options.aggregation.second) {
             const string& key {options.aggregation.first};
             if (key == "srcmac") {
-                addAggr(srcMAC, packetLen);
+                addAggr(srcMAC, size);
             } else if (key == "dstmac") {
-                addAggr(dstMAC, packetLen);
+                addAggr(dstMAC, size);
             }
         }
 
-        auto packetType = ntohs(ether.ether_type);
-        switch (static_cast<Layer2>(packetType)) {
-            case Layer2::IPv4:
-            case Layer2::IPv6: 
+        uint16_t type = ntohs(ether->ether_type);
+        switch (type) {
+            case IEEE_802_1q:
             {
+                packet += SkipToEtherType;
+                msg += vlan::vlan_info(packet);
+                tie(packet, type) = vlan::vlan_skip(packet);
+                packet += SkipToIP;
                 break;
             }
-            case Layer2::IEEE_802_1q:
+            case IEEE_802_1ad:
             {
+                packet += SkipToEtherType;
                 msg += vlan::vlan_info(packet);
-                tie(packet, packetType) = vlan::vlan_skip(packet);
+                tie(packet, type) = vlan::vlan_skip(packet);
+                msg += vlan::vlan_info(packet);
+                tie(packet, type) = vlan::vlan_skip(packet);
+                packet += SkipToIP;
                 break;
             }
-            case Layer2::IEEE_802_1ad:
+            default: 
             {
-                msg += vlan::vlan_info(packet);
-                tie(packet, packetType) = vlan::vlan_skip(packet);
-                msg += vlan::vlan_info(packet);
-                tie(packet, packetType) = vlan::vlan_skip(packet);
-                break;
+                if (type == IPv4 || type == IPv6) {
+                    packet += SkipToEtherType + SkipToIP;
+                } else {
+                    throw utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(type)};
+                }
             }
-            default: throw utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(packetType)};
         }
 
-        constexpr auto ipOffset {14};
-        packet = next(packet, ipOffset);
-        return msg + " | " + layer3::PacketLayer3(packet, packetType, packetLen);
+        return msg + " | " + layer3::PacketLayer3(packet, type, size);
     }
 
-    pair<string, string> SrcDstMAC(const ether_header& ether) {
-        string SrcMAC {PrintMAC(*reinterpret_cast<const ether_addr*>(&ether.ether_shost))};
-        string DstMAC {PrintMAC(*reinterpret_cast<const ether_addr*>(&ether.ether_dhost))};
+    string MACtoString(const ether_addr* mac) {
+        const uint8_t* octets {mac->ether_addr_octet};
 
-        return make_pair(SrcMAC, DstMAC);
-    }
+        char buf[100];
 
-    string PrintSrcDstMAC(const string& srcMAC, const string& dstMAC) {
-        return "Ethernet: " + srcMAC + ' ' + dstMAC;
-    }
+        sprintf(buf, "%02x:%02x:%02x:%02x:%02x:%02x",
+                      (unsigned char) octets[0],
+                      (unsigned char) octets[1],
+                      (unsigned char) octets[2],
+                      (unsigned char) octets[3],
+                      (unsigned char) octets[4],
+                      (unsigned char) octets[5]);
 
-    string PrintMAC(const ether_addr& mac) {
-        const uint8_t* octets {&mac.ether_addr_octet[0]};
-
-        ostringstream ss;
-        ss.fill('0');
-        ss << hex << setw(2) << unsigned{octets[0]} << ':'
-                  << setw(2) << unsigned{octets[1]} << ':'
-                  << setw(2) << unsigned{octets[2]} << ':'
-                  << setw(2) << unsigned{octets[3]} << ':'
-                  << setw(2) << unsigned{octets[4]} << ':'
-                  << setw(2) << unsigned{octets[5]};
-        return ss.str();
+        return string{buf};
     }
 
     namespace vlan {
         string vlan_info(const uint8_t* packet) {
-            constexpr size_t VlanOffset {12};
-            uint32_t vlanHdr {ntohl(*reinterpret_cast<const uint32_t*>(next(packet, VlanOffset)))};
+            uint32_t vlanHdr = ntohl(*(const uint32_t*)(packet));
+            const vlan_hdr* vlan {(const vlan_hdr*)(&vlanHdr)};
 
-            vlan_hdr vlan {*reinterpret_cast<vlan_hdr*>(&vlanHdr)};
-            return ' ' + to_string(vlan.tci.vid);
+            return ' ' + to_string(vlan->tci.vid);
         }
 
         pair<const uint8_t*, int> vlan_skip(const uint8_t* packet) {
-            constexpr size_t VlanOffsetPlusSize {12 + sizeof(vlan_hdr)};
-            int packetType {ntohs(*reinterpret_cast<const uint16_t*>(next(packet, VlanOffsetPlusSize)))};
-            packet = next(packet, 4);
+            const size_t SkipVlanHeader = sizeof(vlan_hdr);
+            int packetType = ntohs(*(const uint16_t*)(packet + SkipVlanHeader));
+            packet += SkipVlanHeader;
 
             return make_pair(packet, packetType);
         }
-
     }
 }
