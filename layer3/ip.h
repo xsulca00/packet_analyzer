@@ -140,8 +140,6 @@ namespace packet_analyzer::layer3 {
     pair<string, string> SrcAndDstIPv4Address(const ip& iip);
     string MakeIPv4StringToPrint(const string& src, const string& dst, uint8_t ttl);
     bool IsICMPv4(const ip& ip);
-    const uint8_t* SkipIPv4Header(const uint8_t* packetL3);
-    string PrintICMPv4(uint8_t type, uint8_t code);
     pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip);
     string MakeIPv6StringToPrint(const string& src, const string& dst, uint8_t hopLimit);
     constexpr size_t HeaderLenIPv6() { return sizeof(ip6_hdr); }
