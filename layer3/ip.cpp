@@ -26,18 +26,17 @@ namespace packet_analyzer::layer3 {
         enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6, ICMPv4 = 1 };
 
         using arguments::addAggr;
+        using arguments::options;
 
         string msg;
 
         string SrcIP;
         string DstIP;
 
-        using arguments::options;
-
         switch(static_cast<Layer3>(packetType)) {
             case Layer3::IPv4:
             {
-                const ip& packet {*(ip*)packetL3};
+                const ip& packet {*reinterpret_cast<const ip*>(packetL3)};
 
                 // TODO: rfc 815 algorithm
                 if (IsFragmented(packet)) {
@@ -60,11 +59,6 @@ namespace packet_analyzer::layer3 {
 
                         msg += MakeIPv4StringToPrint(src, dst, packet.ip_ttl);
 
-                        if (IsICMPv4(packet)) {
-                            const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
-                            return msg + PrintICMPv4(icmp.type, icmp.code);
-                        }
-
                         if (options.aggregation.second) {
                             const string& key {options.aggregation.first};
                             if (key == "srcip") {
@@ -72,6 +66,11 @@ namespace packet_analyzer::layer3 {
                             } else if (key == "dstip") {
                                 addAggr(dst, packetLen);
                             }
+                        }
+
+                        if (IsICMPv4(packet)) {
+                            const icmphdr& icmp {*reinterpret_cast<const icmphdr*>(next(packetL3, HeaderLenIPv4(packet)))};
+                            return msg + PrintICMPv4(icmp.type, icmp.code);
                         }
 
                         packetL3 = SkipIPv4Header(packetL3);
@@ -84,11 +83,6 @@ namespace packet_analyzer::layer3 {
 
                     msg += MakeIPv4StringToPrint(src, dst, packet.ip_ttl);
 
-                    if (IsICMPv4(packet)) {
-                        const icmphdr& icmp {*(icmphdr*)(packetL3 + HeaderLenIPv4(packet))};
-                        return msg + PrintICMPv4(icmp.type, icmp.code);
-                    }
-
                     if (options.aggregation.second) {
                         const string& key {options.aggregation.first};
                         if (key == "srcip") {
@@ -96,6 +90,11 @@ namespace packet_analyzer::layer3 {
                         } else if (key == "dstip") {
                             addAggr(dst, packetLen);
                         }
+                    }
+
+                    if (IsICMPv4(packet)) {
+                        const icmphdr& icmp {*reinterpret_cast<const icmphdr*>(next(packetL3, HeaderLenIPv4(packet)))};
+                        return msg + PrintICMPv4(icmp.type, icmp.code);
                     }
 
                     packetL3 = SkipIPv4Header(packetL3);
@@ -106,7 +105,7 @@ namespace packet_analyzer::layer3 {
             }
             case Layer3::IPv6:
             {
-                const ip6_hdr& ip {*(ip6_hdr*)packetL3};
+                const ip6_hdr& ip {*reinterpret_cast<const ip6_hdr*>(packetL3)};
 
                 string src;
                 string dst;
@@ -131,7 +130,7 @@ namespace packet_analyzer::layer3 {
                 }
 
                 if (IsICMPv6(next)) {
-                    const icmp6_hdr& icmp {*(icmp6_hdr*)(packetL3)};
+                    const icmp6_hdr& icmp {*reinterpret_cast<const icmp6_hdr*>(packetL3)};
                     return msg + PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
                 }
 
