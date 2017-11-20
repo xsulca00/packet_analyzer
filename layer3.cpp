@@ -106,7 +106,7 @@ namespace packet_analyzer::layer3 {
 
         if (!IsL4Protocol(type)) return result.str();
 
-        result << " | " << layer4::PacketLayer4(packetL3, type, size);
+        result << " | " << layer4::Layer4(packetL3, type, size);
         return result.str();
     }
 
