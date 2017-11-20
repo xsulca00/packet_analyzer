@@ -25,7 +25,7 @@ namespace packet_analyzer::layer2 {
             uint16_t tpid;
         } __attribute__((packed));
 
-        string vlan_info(const uint8_t* packet);
-        pair<const uint8_t*, int> vlan_skip(const uint8_t* packet);
+        string VlanInfo(const uint8_t* packet);
+        pair<const uint8_t*, int> VlanSkip(const uint8_t* packet);
     }
 }
