@@ -32,7 +32,6 @@ namespace packet_analyzer::layer4 {
                 srcPort = to_string(ntohs(tcp->th_sport));
                 dstPort = to_string(ntohs(tcp->th_dport));
 
-                // TODO
                 if (argumentsParser.IsSet("a")) {
                     const string& key = arguments.aggregation;
                     if (key == "srcport") {
@@ -54,7 +53,6 @@ namespace packet_analyzer::layer4 {
                 srcPort = to_string(ntohs(udp->uh_sport));
                 dstPort = to_string(ntohs(udp->uh_dport));
 
-                // TODO
                 if (argumentsParser.IsSet("a")) {
                     const string& key = arguments.aggregation;
                     if (key == "srcport") {

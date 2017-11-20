@@ -26,6 +26,7 @@ namespace packet_analyzer::layer2 {
         ostringstream result;
 
         const ether_header* ether = (const ether_header*)packet;
+        // offsets to skip in packet
         const size_t SkipToEtherType = 12;
         const size_t SkipToIP = 2;
 
@@ -49,6 +50,7 @@ namespace packet_analyzer::layer2 {
             {
                 packet += SkipToEtherType;
 
+                // vlan tag
                 result << vlan::VlanInfo(packet);
                 auto p = vlan::VlanSkip(packet);
                 packet = p.first;
@@ -61,11 +63,13 @@ namespace packet_analyzer::layer2 {
             {
                 packet += SkipToEtherType;
 
+                // fist VLAN tag
                 result << vlan::VlanInfo(packet);
                 auto p = vlan::VlanSkip(packet);
                 packet = p.first;
                 type = p.second;
 
+                // second VLAN tag
                 result << vlan::VlanInfo(packet);
                 auto p2 = vlan::VlanSkip(packet);
                 packet = p2.first;

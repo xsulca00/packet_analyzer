@@ -34,6 +34,7 @@ namespace packet_analyzer::layer3 {
             {
                 const ip* ipv4 = (const ip*)packetL3;
 
+                // to string IP 
                 string src = inet_ntoa(ipv4->ip_src);
                 string dst = inet_ntoa(ipv4->ip_dst);
 
@@ -66,10 +67,10 @@ namespace packet_analyzer::layer3 {
                 const ip6_hdr* ip = (const ip6_hdr*)packetL3;
 
                 char buffer[INET6_ADDRSTRLEN];
+                // to string IP 
                 string src = inet_ntop(AF_INET6, (void*)(&ip->ip6_src), buffer, INET6_ADDRSTRLEN);
                 string dst = inet_ntop(AF_INET6, (void*)(&ip->ip6_dst), buffer, INET6_ADDRSTRLEN);
 
-                // TODO
                 if (argumentsParser.IsSet("a")) {
                     const string& key = arguments.aggregation;
                     if (key == "srcip") {
