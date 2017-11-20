@@ -24,8 +24,8 @@ namespace packet_analyzer::layer3 {
     string Layer3(const uint8_t* packetL3, int type, size_t size) {
         enum Layer3 { IPv4 = 0x0800, IPv6 = 0x86DD, ICMPv4 = 1, ICMPv6 = 58 };
 
-        using arguments::addAggr;
-        using arguments::options;
+        using namespace packet_analyzer;
+        using namespace packet_analyzer::parameters;
 
         ostringstream result;
 
@@ -40,8 +40,8 @@ namespace packet_analyzer::layer3 {
                 result << "IPv4: " << src << ' ' << dst << ' ' << (unsigned)ipv4->ip_ttl;
 
                 // TODO
-                if (options.aggregation.second) {
-                    const string& key = options.aggregation.first;
+                if (argumentsParser.IsSet("a")) {
+                    const string& key = arguments.aggregation;
                     if (key == "srcip") {
                         addAggr(src, size);
                     } else if (key == "dstip") {
@@ -71,8 +71,8 @@ namespace packet_analyzer::layer3 {
                 string dst = inet_ntop(AF_INET6, (void*)(&ip->ip6_dst), buffer, INET6_ADDRSTRLEN);
 
                 // TODO
-                if (options.aggregation.second) {
-                    const string& key = options.aggregation.first;
+                if (argumentsParser.IsSet("a")) {
+                    const string& key = arguments.aggregation;
                     if (key == "srcip") {
                         addAggr(src, size);
                     } else if (key == "dstip") {

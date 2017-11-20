@@ -12,49 +12,41 @@ extern "C" {
 
 #include "utils.h"
 
-namespace packet_analyzer::arguments {
+namespace packet_analyzer::parameters {
     using namespace std;
 
-    // .first - value
-    // .second - is set
-    struct Options {
-        pair<string, bool> help;
-        pair<string, bool> aggregation;
-        pair<string, bool> sortBy;
-        pair<size_t, bool> limit;
-        pair<string, bool> filter;
-    };
+    // pair -> {packets, bytes}
+    using AggrInfo = pair<size_t, size_t>;
 
-    extern Options options;
-
-    struct Aggregation { size_t packets; size_t bytes; };
-    extern map<string, Aggregation> aggregations;
+    extern map<string, AggrInfo> aggregationsStatistics;
 
     void addAggr(const string& key, size_t size);
 
-    class Parser {
+    struct Arguments {
+        string help;
+        string aggregation;
+        string sortBy;
+        string filter;
+        string limit;
+    };
+
+    // program arguments passed via console
+    extern Arguments arguments;
+
+    class ArgumentParser {
     public:
-        // exception classes
-        class BadArgsStructure {};
-        class BadArgsNum {};
+        ArgumentParser() = default;
+        ArgumentParser(int argc, char* argv[], const char* getoptstr);
 
-        Parser(int argc, char* argv[], const char* arguments);
-        const unordered_map<string, string>& args() const { return options; }
-
-        template<typename T>
-        pair<T,bool> get(const string& s) { 
-            const auto& o = options[s];
-            if (o.empty()) return make_pair(T{}, false);
-            return make_pair(utils::to<T>(o), !o.empty());
+        bool IsSet(const string& s) { 
+            const auto& o = arguments[s];
+            if (o.empty()) return false;
+            return true;
         }
 
-        const vector<string>& files() const { return fileNames; }
+        unordered_map<string, string> arguments;
+        vector<string> files;
     private:
-        string aggr_key(const string& s) const;
-        string sort_key(const string& s) const;
-        string limit(const string& s) const;
-        string filter_expression(const string& s) const;
-
         static constexpr auto help =
             "Usage:\n"
             "isashark [-h] [-a aggr-key] [-s sort-key] [-l limit] [-f filter-expression] file ...\n"
@@ -79,7 +71,13 @@ namespace packet_analyzer::arguments {
             "file                   Cesta k souboru ve formátu pcap (čitelný knihovnou libpcap).\n"
             "                       Možné je zadat jeden a více souborů.";
 
-        unordered_map<string, string> options;
-        vector<string> fileNames;
     };
+
+    // parsing program arguments
+    extern ArgumentParser argumentsParser;
+
+    string CheckAggrKey(const string& s);
+    string CheckSortKey(const string& s);
+    string CheckLimit(const string& s);
+    string CheckFilter(const string& s);
 }

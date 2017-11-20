@@ -17,8 +17,8 @@ namespace packet_analyzer::layer4 {
     string Layer4(const uint8_t* packetL4, int type, size_t size) {
         enum Layer4 { TCP = 6, UDP = 17 };
 
-        using arguments::options;
-        using arguments::addAggr;
+        using namespace packet_analyzer;
+        using namespace packet_analyzer::parameters;
 
         ostringstream result;
         string srcPort;
@@ -33,8 +33,8 @@ namespace packet_analyzer::layer4 {
                 dstPort = to_string(ntohs(tcp->th_dport));
 
                 // TODO
-                if (options.aggregation.second) {
-                    const string& key = options.aggregation.first;
+                if (argumentsParser.IsSet("a")) {
+                    const string& key = arguments.aggregation;
                     if (key == "srcport") {
                         addAggr(srcPort, size);
                     } else if (key == "dstport") {
@@ -55,8 +55,8 @@ namespace packet_analyzer::layer4 {
                 dstPort = to_string(ntohs(udp->uh_dport));
 
                 // TODO
-                if (options.aggregation.second) {
-                    const string& key = options.aggregation.first;
+                if (argumentsParser.IsSet("a")) {
+                    const string& key = arguments.aggregation;
                     if (key == "srcport") {
                         addAggr(srcPort, size);
                     } else if (key == "dstport") {

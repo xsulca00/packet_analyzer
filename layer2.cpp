@@ -20,8 +20,8 @@ namespace packet_analyzer::layer2 {
     string Layer2(const uint8_t* packet, size_t size) {
         enum Layer2 { IPv4 = 0x0800, IPv6 = 0x86DD, IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
 
-        using arguments::options;
-        using arguments::addAggr;
+        using namespace packet_analyzer;
+        using namespace packet_analyzer::parameters;
 
         ostringstream result;
 
@@ -35,8 +35,8 @@ namespace packet_analyzer::layer2 {
         result << "Ethernet: " << srcMAC << ' ' << dstMAC;
 
         // TODO
-        if (options.aggregation.second) {
-            const string& key {options.aggregation.first};
+        if (argumentsParser.IsSet("a")) {
+            const string& key = arguments.aggregation;
             if (key == "srcmac") {
                 addAggr(srcMAC, size);
             } else if (key == "dstmac") {
