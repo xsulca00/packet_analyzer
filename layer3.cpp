@@ -53,7 +53,6 @@ namespace packet_analyzer::layer3 {
                 if (ipv4->ip_p == ICMPv4) {
                     // skip IPv4 header
                     const icmphdr* icmp = (const icmphdr*)(packetL3 + IPv4HeaderSize(ipv4));
-                    // TODO
                     result << ICMPv4Messages(icmp->type, icmp->code);
                     return result.str();
                 }
