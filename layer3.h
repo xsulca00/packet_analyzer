@@ -13,41 +13,6 @@ extern "C" {
 }
 
 namespace packet_analyzer::layer3 {
-    struct TupleToHashForIPv4 {
-        uint32_t SrcIP;
-        uint32_t DstIP;
-        uint16_t identification;
-    };
-
-    struct FragmentInfo {
-        size_t maxSize;
-        size_t currentSize;
-    };
-}
-
-namespace std {
-    using packet_analyzer::layer3::TupleToHashForIPv4;
-
-    template<>
-    struct hash<TupleToHashForIPv4> {
-        size_t operator()(const TupleToHashForIPv4& t) const {
-            return hash<uint32_t>{}(t.SrcIP) ^
-                   hash<uint32_t>{}(t.DstIP) ^
-                   hash<uint16_t>{}(t.identification);
-        }
-    };
-
-    template<>
-    struct equal_to<TupleToHashForIPv4> {
-        bool operator()(const TupleToHashForIPv4& l, const TupleToHashForIPv4& r) const {
-            return l.SrcIP == r.SrcIP &&
-                   l.DstIP == r.DstIP &&
-                   l.identification == r.identification;
-        }
-    };
-}
-
-namespace packet_analyzer::layer3 {
     using namespace std;
 
     class ICMPv4ErrorMessages {
@@ -121,31 +86,20 @@ namespace packet_analyzer::layer3 {
         unordered_map<int, pair<string, vector<string>>> errorMsgICMPv6;
     };
 
-    extern unordered_map<TupleToHashForIPv4, FragmentInfo> fragments;
-
-    enum class UpperLayerIPv6 { TCP = 6, UDP = 17, ICMPv6 = 58  };
-    enum class ExtensionsIPv6 { HopByHop = 0,
-                                Routing = 43,
-                                // Fragment header not supported
-                                DestinationOptions = 60,
-                                NoNextHeader = 59 };
+    enum UpperLayerIPv6 { TCP = 6, UDP = 17, ICMPv6 = 58  };
+    enum ExtensionsIPv6 { HopByHop = 0,
+                          Routing = 43,
+                          // Fragment header not supported
+                          DestinationOptions = 60,
+                          NoNextHeader = 59 };
 
 
-    string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen);
-    bool IsFlagMoreFragmentsSet(uint16_t offset);
-    bool IsOffsetNonZero(uint16_t offset);
-    bool IsFragmented(const ip& header);
-    TupleToHashForIPv4 TupleToHash(const ip& headerIPv4);
-    size_t HeaderLenIPv4(const ip& header); 
-    pair<string, string> SrcAndDstIPv4Address(const ip& iip);
-    string MakeIPv4StringToPrint(const string& src, const string& dst, uint8_t ttl);
-    bool IsICMPv4(const ip& ip);
-    const uint8_t* SkipIPv4Header(const uint8_t* packetL3);
+    string Layer3(const uint8_t* packetL3, int type, size_t size);
+    size_t HeaderLenIPv4(const ip* header); 
     string PrintICMPv4(uint8_t type, uint8_t code);
     pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip);
-    string MakeIPv6StringToPrint(const string& src, const string& dst, uint8_t hopLimit);
     constexpr size_t HeaderLenIPv6() { return sizeof(ip6_hdr); }
-    bool IsProtocolFromL4(uint8_t number);
+    bool IsL4Protocol(uint8_t number);
     pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet);
     string PrintICMPv4(uint8_t type, uint8_t code);
     string PrintICMPv6(uint8_t type, uint8_t code);
@@ -153,5 +107,4 @@ namespace packet_analyzer::layer3 {
     bool NoNextProtocol(uint8_t next);
     const uint8_t* SkipICMPv4Header(const uint8_t* packetL3);
     const uint8_t* SkipICMPv6Header(const uint8_t* packetL3);
-    const uint8_t* SkipIPv4Header(const uint8_t* packetL3);
 }

@@ -72,7 +72,7 @@ namespace packet_analyzer::layer2 {
             }
         }
 
-        return msg + " | " + layer3::PacketLayer3(packet, type, size);
+        return msg + " | " + layer3::Layer3(packet, type, size);
     }
 
     string MACtoString(const ether_addr* mac) {

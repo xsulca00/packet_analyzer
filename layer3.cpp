@@ -20,10 +20,8 @@ extern "C" {
 namespace packet_analyzer::layer3 {
     using namespace std;
 
-    unordered_map<TupleToHashForIPv4, FragmentInfo> fragments {};
-
-    string PacketLayer3(const uint8_t* packetL3, int packetType, size_t packetLen) {
-        enum class Layer3 { IPv4 = ETHERTYPE_IP, IPv6 = ETHERTYPE_IPV6, ICMPv4 = 1 };
+    string Layer3(const uint8_t* packetL3, int type, size_t size) {
+        enum Layer3 { IPv4 = 0x0800, IPv6 = 0x86DD, ICMPv4 = 1, ICMPv6 = 58 };
 
         using arguments::addAggr;
         using arguments::options;
@@ -33,175 +31,96 @@ namespace packet_analyzer::layer3 {
         string SrcIP;
         string DstIP;
 
-        switch(static_cast<Layer3>(packetType)) {
-            case Layer3::IPv4:
+        switch(type) {
+            case IPv4:
             {
-                const ip& packet {*reinterpret_cast<const ip*>(packetL3)};
+                const ip* ipv4 = (const ip*)packetL3;
 
-                // TODO: rfc 815 algorithm
-                if (IsFragmented(packet)) {
-                    size_t dataLen {ntohs(packet.ip_len) - HeaderLenIPv4(packet)};
-                    uint16_t offset {ntohs(packet.ip_off)};
+                string src = inet_ntoa(ipv4->ip_src);
+                string dst = inet_ntoa(ipv4->ip_dst);
+                msg += "IPv4: " + src + ' ' + dst + ' ' + to_string(ipv4->ip_ttl);
 
-                    FragmentInfo& fragment = fragments[TupleToHash(packet)];
-
-                    if (IsFlagMoreFragmentsSet(offset)) {
-                        fragment.currentSize += dataLen;
-                    } else if (IsOffsetNonZero(offset)) {
-                        fragment.maxSize = offset*8 + dataLen;
-                        fragment.currentSize += dataLen;
+                if (options.aggregation.second) {
+                    const string& key = options.aggregation.first;
+                    if (key == "srcip") {
+                        addAggr(src, size);
+                    } else if (key == "dstip") {
+                        addAggr(dst, size);
                     }
-
-                    if (fragment.maxSize > 0 && fragment.currentSize >= fragment.maxSize) {
-                        string src;
-                        string dst;
-                        tie(src,dst) = SrcAndDstIPv4Address(packet);
-
-                        msg += MakeIPv4StringToPrint(src, dst, packet.ip_ttl);
-
-                        if (options.aggregation.second) {
-                            const string& key {options.aggregation.first};
-                            if (key == "srcip") {
-                                addAggr(src, packetLen);
-                            } else if (key == "dstip") {
-                                addAggr(dst, packetLen);
-                            }
-                        }
-
-                        if (IsICMPv4(packet)) {
-                            const icmphdr& icmp {*reinterpret_cast<const icmphdr*>(next(packetL3, HeaderLenIPv4(packet)))};
-                            return msg + PrintICMPv4(icmp.type, icmp.code);
-                        }
-
-                        packetL3 = SkipIPv4Header(packetL3);
-                        packetType = packet.ip_p;
-                    }
-                } else {
-                    string src;
-                    string dst;
-                    tie(src,dst) = SrcAndDstIPv4Address(packet);
-
-                    msg += MakeIPv4StringToPrint(src, dst, packet.ip_ttl);
-
-                    if (options.aggregation.second) {
-                        const string& key {options.aggregation.first};
-                        if (key == "srcip") {
-                            addAggr(src, packetLen);
-                        } else if (key == "dstip") {
-                            addAggr(dst, packetLen);
-                        }
-                    }
-
-                    if (IsICMPv4(packet)) {
-                        const icmphdr& icmp {*reinterpret_cast<const icmphdr*>(next(packetL3, HeaderLenIPv4(packet)))};
-                        return msg + PrintICMPv4(icmp.type, icmp.code);
-                    }
-
-                    packetL3 = SkipIPv4Header(packetL3);
-                    packetType = packet.ip_p;
                 }
+
+                // is ICMPv4
+                if (ipv4->ip_p == ICMPv4) {
+                    // skip IPv4 header
+                    const icmphdr* icmp = (const icmphdr*)(packetL3 + HeaderLenIPv4(ipv4));
+                    return msg + PrintICMPv4(icmp->type, icmp->code);
+                }
+
+                packetL3 += HeaderLenIPv4(ipv4);
+                type = ipv4->ip_p;
 
                 break;
             }
-            case Layer3::IPv6:
+            case IPv6:
             {
-                const ip6_hdr& ip {*reinterpret_cast<const ip6_hdr*>(packetL3)};
+                const ip6_hdr* ip = (const ip6_hdr*)packetL3;
 
-                string src;
-                string dst;
-                tie(src,dst) = SrcAndDstIPv6Address(ip);
+                char buffer[INET6_ADDRSTRLEN];
+                string src = inet_ntop(AF_INET6, (void*)(&ip->ip6_src), buffer, INET6_ADDRSTRLEN);
+                string dst = inet_ntop(AF_INET6, (void*)(&ip->ip6_dst), buffer, INET6_ADDRSTRLEN);
 
                 if (options.aggregation.second) {
-                    const string& key {options.aggregation.first};
+                    const string& key = options.aggregation.first;
                     if (key == "srcip") {
-                        addAggr(src, packetLen);
+                        addAggr(src, size);
                     } else if (key == "dstip") {
-                        addAggr(dst, packetLen);
+                        addAggr(dst, size);
                     }
                 }
 
-                msg += MakeIPv6StringToPrint(src, dst, ip.ip6_hlim);
+                msg += "IPv6: " + src + ' ' + dst + ' ' + to_string(ip->ip6_hlim);
 
-                uint8_t next {};
+                uint8_t next;
                 tie(next, packetL3) = SkipExtensions(packetL3);
 
-                if (NoNextProtocol(next)) {
+                // is ICMPv6
+                if (next == ICMPv6) {
+                    const icmp6_hdr* icmp = (const icmp6_hdr*)packetL3;
+                    return msg + PrintICMPv6(icmp->icmp6_type, icmp->icmp6_code);
+                } else if (next == NoNextHeader) {
                     return msg;
                 }
 
-                if (IsICMPv6(next)) {
-                    const icmp6_hdr& icmp {*reinterpret_cast<const icmp6_hdr*>(packetL3)};
-                    return msg + PrintICMPv6(icmp.icmp6_type, icmp.icmp6_code);
-                }
-
-                packetType = next;
+                type = next;
                 break;
             }
-            default: throw utils::BadProtocolType{"Layer3: Unknown protocol type: " + to_string(packetType)};
+            default: throw utils::BadProtocolType{"Layer3: Unknown protocol type: " + to_string(type)};
         }
 
-        if (!IsProtocolFromL4(packetType)) return msg;
+        if (!IsL4Protocol(type)) return msg;
 
-        return msg + " | " + layer4::PacketLayer4(packetL3, packetType, packetLen);
+        return msg + " | " + layer4::PacketLayer4(packetL3, type, size);
     }
 
-    bool IsFlagMoreFragmentsSet(uint16_t offset) { return offset & IP_MF; }
-    bool IsOffsetNonZero(uint16_t offset) { return offset != 0; }
-    bool IsFragmented(const ip& header) {
-        uint16_t offset {ntohs(header.ip_off)};
-        return IsFlagMoreFragmentsSet(offset) || IsOffsetNonZero(offset);
-    }
+    size_t HeaderLenIPv4(const ip* header) { return header->ip_hl * 4; }
 
-    TupleToHashForIPv4 TupleToHash(const ip& headerIPv4) {
-        return {headerIPv4.ip_src.s_addr,
-                headerIPv4.ip_dst.s_addr,
-                headerIPv4.ip_id};
-    }
-
-    size_t HeaderLenIPv4(const ip& header) { return header.ip_hl * 4; }
-    pair<string, string> SrcAndDstIPv4Address(const ip& iip) {
-        string src {inet_ntoa(iip.ip_src)};
-        string dst {inet_ntoa(iip.ip_dst)};
-        return make_pair(src, dst);
-    }
-
-    string MakeIPv4StringToPrint(const string& src, const string& dst, uint8_t ttl) {
-        return "IPv4: " + src + ' ' + dst + ' ' + to_string(ttl);
-    }
-
-    bool IsICMPv4(const ip& ip) { return ip.ip_p == 1; }
-
-    pair<string, string> SrcAndDstIPv6Address(const ip6_hdr& ip) {
-        array<char, INET6_ADDRSTRLEN> buf;
-
-        string src {inet_ntop(AF_INET6, (void*)(&ip.ip6_src), buf.data(), buf.size())};
-        string dst {inet_ntop(AF_INET6, (void*)(&ip.ip6_dst), buf.data(), buf.size())};
-
-        return make_pair(src, dst);
-    }
-
-    string MakeIPv6StringToPrint(const string& src, const string& dst, uint8_t hopLimit) {
-        return "IPv6: " + src + ' ' + dst + ' ' + to_string(hopLimit);
-    }
-
-    bool IsProtocolFromL4(uint8_t number) {
-        UpperLayerIPv6 n {static_cast<UpperLayerIPv6>(number)};
-        return n == UpperLayerIPv6::TCP ||
-               n == UpperLayerIPv6::UDP ||
-               n == UpperLayerIPv6::ICMPv6;
+    bool IsL4Protocol(uint8_t n) {
+        return n == TCP || n == UDP || n == ICMPv6;
     }
 
     pair<uint8_t, const uint8_t*> SkipExtensions(const uint8_t* packet) {
-        const ip6_hdr& ip {*reinterpret_cast<const ip6_hdr*>(packet)};
-        uint8_t next {ip.ip6_nxt};
-        const uint8_t* p {std::next(packet, HeaderLenIPv6())};
+        const ip6_hdr* ip = (const ip6_hdr*)packet;
+        uint8_t next = ip->ip6_nxt;
+        const uint8_t* p = packet + HeaderLenIPv6();
 
         const ip6_ext* e {reinterpret_cast<const ip6_ext*>(p)};
 
-        for (; !IsProtocolFromL4(next);) {
+
+        for (; !(IsL4Protocol(next) || next == NoNextHeader);) {
             next = e->ip6e_nxt;
+            // skip extension to the next one
             p += (e->ip6e_len + 1)*8;
-            e = reinterpret_cast<const ip6_ext*>(p);
+            e = (const ip6_ext*)p;
         }
 
         return make_pair(next, p);
@@ -235,13 +154,6 @@ namespace packet_analyzer::layer3 {
         return " | ICMPv6: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
     }
 
-    bool IsICMPv6(uint8_t next) {
-        return static_cast<UpperLayerIPv6>(next) == UpperLayerIPv6::ICMPv6;
-    }
-
-    bool NoNextProtocol(uint8_t next) {
-        return static_cast<ExtensionsIPv6>(next) == ExtensionsIPv6::NoNextHeader;
-    }
 
     const uint8_t* SkipICMPv4Header(const uint8_t* packetL3) {
         return packetL3 + sizeof(icmphdr);
@@ -249,9 +161,5 @@ namespace packet_analyzer::layer3 {
 
     const uint8_t* SkipICMPv6Header(const uint8_t* packetL3) {
         return packetL3 + sizeof(icmp6_hdr);
-    }
-
-    const uint8_t* SkipIPv4Header(const uint8_t* packetL3) {
-        return packetL3 + HeaderLenIPv4(*(ip*)packetL3);
     }
 }
