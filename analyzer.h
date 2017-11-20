@@ -15,7 +15,7 @@ namespace packet_analyzer::pcap {
     class PcapFilter {
     public:
         explicit PcapFilter(pcap_t* handle, const string& filter) {
-            if (pcap_compile(handle, &compiledFilter, filter.c_str(), 0, NULL) == -1) {
+            if (pcap_compile(handle, &compiledFilter, filter.c_str(), 0, 0) == -1) {
                 throw runtime_error{"PcapFilter::pcap_compile() failed to compile: '" + filter + "'"};
             }
 
