@@ -64,19 +64,17 @@ int main(int argc, char* argv[]) {
 
         for (const auto& name : ap.files()) {
             for (pcap::Analyzer a {name, options.filter.first}; a.NextPacket(); ++packetsCount) {
-                // TODO: do not print fragmented packet
-                if (packetsCount <= limit) {
-                    try {
-                        if (!options.aggregation.second) {
-                            auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 
-                                               Aggregation{1, a.Header().len});
-                            v.push_back(p);
-                        } else {
-                            PacketDissection(packetsCount, a.Header(), a.Packet());
-                        }
-                    } catch (const utils::BadProtocolType bpt) {
-                        cerr << bpt.what() << '\n';
+            // TODO: do not print fragmented packet
+                try {
+                    if (!options.aggregation.second) {
+                        auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 
+                                           Aggregation{1, a.Header().len});
+                        v.push_back(p);
+                    } else {
+                        PacketDissection(packetsCount, a.Header(), a.Packet());
                     }
+                } catch (const utils::BadProtocolType bpt) {
+                    cerr << bpt.what() << '\n';
                 }
             }
         }
@@ -92,17 +90,23 @@ int main(int argc, char* argv[]) {
                 auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.packets > r.second.packets; };
                 sort(v.begin(), v.end(), f);
             } else if (sortBy == "bytes") {
-                auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.bytes > r.second.bytes; };
+            auto f = [](const pair<string,Aggregation>& l, const pair<string,Aggregation>& r) { return l.second.bytes > r.second.bytes; };
                 sort(v.begin(), v.end(), f);
             }
         }
 
         if (options.aggregation.second) {
-            for (const auto& p : v)
-                cout << p.first << ": " << p.second.packets << ' ' << p.second.bytes << '\n';
+            size_t i {1};
+            for (const auto& p : v) {
+                if (i++ <= limit)
+                    cout << p.first << ": " << p.second.packets << ' ' << p.second.bytes << '\n';
+            }
         } else {
-            for (const auto& p : v)
-                cout << p.first << '\n';
+            size_t i {1};
+            for (const auto& p : v) {
+                if (i++ <= limit)
+                    cout << p.first << '\n';
+            }
         }
     } catch (arguments::Parser::BadArgsStructure) {
         // no message because getopt writes error by itself
