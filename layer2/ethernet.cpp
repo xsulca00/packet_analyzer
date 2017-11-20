@@ -19,7 +19,7 @@ extern "C" {
 
 namespace packet_analyzer::layer2 {
     string PacketLayer2(const uint8_t* packet, size_t packetLen) {
-        enum class Layer2 { IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
+        enum class Layer2 { IPv4 = 0x0800, IPv6 = 0x86DD, IEEE_802_1q  = 0x8100, IEEE_802_1ad = 0x88a8 };
 
         using arguments::options;
         using arguments::addAggr;
@@ -44,6 +44,11 @@ namespace packet_analyzer::layer2 {
 
         auto packetType = ntohs(ether.ether_type);
         switch (static_cast<Layer2>(packetType)) {
+            case Layer2::IPv4:
+            case Layer2::IPv6: 
+            {
+                break;
+            }
             case Layer2::IEEE_802_1q:
             {
                 msg += InfoVLAN(packet);
@@ -58,7 +63,7 @@ namespace packet_analyzer::layer2 {
                 tie(packet, packetType) = SkipVLAN(packet);
                 break;
             }
-            default: utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(packetType)};
+            default: throw utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(packetType)};
         }
 
         constexpr auto ipOffset {14};
