@@ -21,21 +21,24 @@ extern "C" {
 
 #include "utils.h"
 #include "arguments.h"
-#include "analyzer.h"
 #include "layer2.h"
 
 using namespace packet_analyzer;
 using namespace packet_analyzer::parameters;
 using namespace std;
 
-string PrintHeader(const pcap_pkthdr* header) {
-    return to_string(utils::ToMicroSeconds(header->ts)) +' ' + to_string(header->len);
+string HeaderInfo(const pcap_pkthdr* header) {
+    // microseconds
+    auto f = [](const timeval& ts) { return 1'000'000UL * ts.tv_sec + ts.tv_usec; };
+    return to_string(f(header->ts)) + ' ' + to_string(header->len);
 }
 
 string PacketDissection(size_t n, const pcap_pkthdr* header, const uint8_t* packet) {
-    return to_string(n) + ": " + 
-           PrintHeader(header) + " | " +
-           layer2::Layer2(packet, header->len);
+    ostringstream ss;
+    ss << n << ": "  
+       << HeaderInfo(header) << " | " 
+       << layer2::Layer2(packet, header->len);
+    return ss.str();
 }
 
 bool PacketsCompare(const pair<string,AggrInfo>& l, const pair<string,AggrInfo>& r) { return l.second.first > r.second.first; }
@@ -100,8 +103,8 @@ int main(int argc, char* argv[]) {
                     } else {
                         PacketDissection(packetsCount, &header, packet);
                     }
-                } catch (const utils::BadProtocolType bpt) {
-                    cerr << bpt.what() << '\n';
+                } catch (const InvalidProtocol& e) {
+                    cerr << e.what() << '\n';
                 }
             }
 

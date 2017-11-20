@@ -79,8 +79,7 @@ namespace packet_analyzer::layer2 {
                 if (type == IPv4 || type == IPv6) {
                     packet += SkipToEtherType + SkipToIP;
                 } else {
-                    // TODO
-                    throw utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(type)};
+                    throw InvalidProtocol{"Layer2 invalid protocol: " + to_string(type)};
                 }
             }
         }

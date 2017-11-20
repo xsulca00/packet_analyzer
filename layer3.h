@@ -99,6 +99,6 @@ namespace packet_analyzer::layer3 {
     size_t IPv6HeaderSize(); 
     bool IsL4Protocol(uint8_t number);
     pair<uint8_t, const uint8_t*> SkipAllIPv6Extensions(uint8_t next, const uint8_t* packet);
-    string PrintICMPv4(uint8_t type, uint8_t code);
-    string PrintICMPv6(uint8_t type, uint8_t code);
+    string ICMPv4Messages(uint8_t type, uint8_t code);
+    string ICMPv6Messages(uint8_t type, uint8_t code);
 }

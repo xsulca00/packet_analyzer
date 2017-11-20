@@ -53,7 +53,7 @@ namespace packet_analyzer::layer3 {
                     // skip IPv4 header
                     const icmphdr* icmp = (const icmphdr*)(packetL3 + IPv4HeaderSize(ipv4));
                     // TODO
-                    result << PrintICMPv4(icmp->type, icmp->code);
+                    result << ICMPv4Messages(icmp->type, icmp->code);
                     return result.str();
                 }
 
@@ -89,8 +89,7 @@ namespace packet_analyzer::layer3 {
                 // is ICMPv6
                 if (next == ICMPv6) {
                     const icmp6_hdr* icmp = (const icmp6_hdr*)packetL3;
-                    //  TODO
-                    result << PrintICMPv6(icmp->icmp6_type, icmp->icmp6_code);
+                    result << ICMPv6Messages(icmp->icmp6_type, icmp->icmp6_code);
                     return result.str();
                 } else if (next == NoNextHeader) {
                     return result.str();
@@ -99,8 +98,7 @@ namespace packet_analyzer::layer3 {
                 type = next;
                 break;
             }
-            // TODO
-            default: throw utils::BadProtocolType{"Layer3: Unknown protocol type: " + to_string(type)};
+            default: throw InvalidProtocol{"Layer3 invalid protocol: " + to_string(type)};
         }
 
         if (!IsL4Protocol(type)) return result.str();
@@ -131,21 +129,7 @@ namespace packet_analyzer::layer3 {
         return {next, p};
     }
 
-    string PrintICMPv4(uint8_t type, uint8_t code) {
-        static ICMPv4ErrorMessages ICMPv4Messages;
-
-        string typeMsg;
-        string codeMsg;
-        tie(typeMsg, codeMsg) = ICMPv4Messages.MessageFor(type, code);
-
-        if (typeMsg.empty() || codeMsg.empty()) {
-            return "";
-        }
-
-        return " | ICMPv4: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
-    }
-
-    string PrintICMPv6(uint8_t type, uint8_t code) {
+    string ICMPv6Messages(uint8_t type, uint8_t code) {
         static ICMPv6ErrorMessages ICMPv6Messages;
 
         string typeMsg;
@@ -157,6 +141,20 @@ namespace packet_analyzer::layer3 {
         }
 
         return " | ICMPv6: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
+    }
+
+    string ICMPv4Messages(uint8_t type, uint8_t code) {
+        static ICMPv4ErrorMessages ICMPv4Messages;
+
+        string typeMsg;
+        string codeMsg;
+        tie(typeMsg, codeMsg) = ICMPv4Messages.MessageFor(type, code);
+
+        if (typeMsg.empty() || codeMsg.empty()) {
+            return "";
+        }
+
+        return " | ICMPv4: " + to_string(type) + ' ' + to_string(code) + ' ' + typeMsg + ' ' + codeMsg;
     }
 
     size_t IPv6HeaderSize() { return sizeof(ip6_hdr); }

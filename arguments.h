@@ -9,6 +9,7 @@ extern "C" {
 #include <string>
 #include <map>
 #include <vector>
+#include <stdexcept>
 
 #include "utils.h"
 
@@ -21,6 +22,10 @@ namespace packet_analyzer::parameters {
     extern map<string, AggrInfo> aggregationsStatistics;
 
     void addAggr(const string& key, size_t size);
+
+    struct InvalidProtocol : runtime_error {
+        explicit InvalidProtocol(const string& s) : runtime_error{s} {}
+    };
 
     struct Arguments {
         string help;

@@ -67,8 +67,7 @@ namespace packet_analyzer::layer4 {
                 result << "UDP: " << srcPort << ' ' << dstPort;
                 break;
             }
-            // TODO
-            default: throw utils::BadProtocolType{"Layer4: Unknown protocol type: " + to_string(type)};
+            default: throw InvalidProtocol{"Layer4 invalid protocol: " + to_string(type)};
         }
 
         return result.str();
