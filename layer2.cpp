@@ -12,8 +12,8 @@ extern "C" {
 }
 
 #include "layer2.h"
+#include "layer3.h"
 #include "arguments.h"
-#include "layer3/ip.h"
 #include "utils.h"
 
 namespace packet_analyzer::layer2 {
