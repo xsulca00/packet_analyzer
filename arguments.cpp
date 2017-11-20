@@ -11,6 +11,30 @@ namespace packet_analyzer::parameters {
     ArgumentParser argumentsParser;
 
     ArgumentParser::ArgumentParser(int argc, char* argv[], const char* getoptstr) {
+        const char* helpToPrint =
+        "Usage:\n"
+        "isashark [-h] [-a aggr-key] [-s sort-key] [-l limit] [-f filter-expression] file ...\n"
+        "-h                     Vypíše nápovědu a ukončí program.\n"
+        "-a aggr-key            Zapnutí agregace podle klíče aggr-key:\n"
+        "                           srcmac značící zdrojovou MAC adresu\n"
+        "                           dstmac značící cílovou MAC adresu\n"
+        "                           srcip značící zdrojovou IP adresu\n"
+        "                           dstip značící cílovou IP adresu\n"
+        "                           srcport značící číslo zdrojového transportního portu\n"
+        "                           dstport značící číslo cílového transportního portu\n"
+        "-s sort-key            Zapnutí řazení podle klíče sort-key,\n"
+        "                       což může být packets (počet paketů) nebo bytes (počet bajtů).\n"
+        "                       Řadit lze jak agregované tak i neagregované položky.\n"
+        "                       Ve druhém případě je klíč packets bez efektu,\n"
+        "                       protože všechny položky obsahují pouze jeden paket.\n"
+        "                       Řadí se vždy sestupně.\n"
+        "-l limit               Nezáporné celé číslo v desítkové soustavě\n"
+        "                       udávající limit počtu vypsaných položek.\n"
+        "-f filter-expression   Program zpracuje pouze pakety,\n"
+        "                       které vyhovují filtru danému řetězcem filter-expression\n"
+        "file                   Cesta k souboru ve formátu pcap (čitelný knihovnou libpcap).\n"
+        "                       Možné je zadat jeden a více souborů.";
+
         if (argc <= 0) throw runtime_error{"ArgumentParser: argc <= 0 !"};
 
         // process arguments
@@ -18,7 +42,7 @@ namespace packet_analyzer::parameters {
         while ((c = getopt(argc, argv, getoptstr)) != -1) {
             switch(c) {
                 case 'f': arguments["f"] = optarg; break;
-                case 'h': arguments["h"] = help; break;
+                case 'h': arguments["h"] = helpToPrint; break;
                 case 's': arguments["s"] = CheckSortKey(optarg); break;
                 case 'l': arguments["l"] = CheckLimit(optarg); break;
                 case 'a': arguments["a"] = CheckAggrKey(optarg); break;

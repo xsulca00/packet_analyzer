@@ -34,7 +34,6 @@ namespace packet_analyzer::layer2 {
 
         result << "Ethernet: " << srcMAC << ' ' << dstMAC;
 
-        // TODO
         if (argumentsParser.IsSet("a")) {
             const string& key = arguments.aggregation;
             if (key == "srcmac") {

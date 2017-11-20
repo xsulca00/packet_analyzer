@@ -28,15 +28,18 @@ using namespace packet_analyzer;
 using namespace packet_analyzer::parameters;
 using namespace std;
 
-string PrintHeader(const pcap_pkthdr& header) {
-    return to_string(utils::ToMicroSeconds(header.ts)) +' ' + to_string(header.len);
+string PrintHeader(const pcap_pkthdr* header) {
+    return to_string(utils::ToMicroSeconds(header->ts)) +' ' + to_string(header->len);
 }
 
-string PacketDissection(size_t n, const pcap_pkthdr& header, const uint8_t* packet) {
+string PacketDissection(size_t n, const pcap_pkthdr* header, const uint8_t* packet) {
     return to_string(n) + ": " + 
            PrintHeader(header) + " | " +
-           layer2::Layer2(packet, header.len);
+           layer2::Layer2(packet, header->len);
 }
+
+bool PacketsCompare(const pair<string,AggrInfo>& l, const pair<string,AggrInfo>& r) { return l.second.first > r.second.first; }
+bool BytesCompare(const pair<string,AggrInfo>& l, const pair<string,AggrInfo>& r) { return l.second.second > r.second.second; }
 
 int main(int argc, char* argv[]) {
     try {
@@ -58,26 +61,51 @@ int main(int argc, char* argv[]) {
         if (argumentsParser.IsSet("l")) limit = utils::to<size_t>(arguments.limit);
 
         size_t packetsCount = 1;
-
         vector<pair<string, AggrInfo>> v; 
 
         bool IsAggregationSet = argumentsParser.IsSet("a");
         bool IsSortBySet = argumentsParser.IsSet("s");
 
         for (const auto& name : argumentsParser.files) {
-            for (pcap::Analyzer a {name, arguments.filter}; a.NextPacket(); ++packetsCount) {
+            bpf_program filter;
+            char errbuffer[PCAP_ERRBUF_SIZE];
+            pcap_t* handle = pcap_open_offline(name.c_str(), errbuffer);
+            
+            if (handle) {
+                if (pcap_compile(handle, &filter, arguments.filter.c_str(), 0, 0) == -1) {
+                    cerr << "pcap_compile(): failed to compile: " << arguments.filter << '\n';
+                    pcap_close(handle);
+                    continue;
+                }
+
+                if (pcap_setfilter(handle, &filter) == -1) {
+                    cerr << "pcap_setfilter(): failed to set filter\n";
+                    pcap_close(handle);
+                    continue;
+                }
+            } else {
+                cerr << "pcap_open_offline() failed: " << errbuffer << '\n';
+                continue;
+            }
+
+            const uint8_t* packet;
+            pcap_pkthdr header;
+
+            for (; (packet = pcap_next(handle, &header)) != NULL; ++packetsCount) {
                 try {
                     if (!IsAggregationSet) {
-                        auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 
-                                           make_pair(1, a.Header().len));
+                        auto p = make_pair(PacketDissection(packetsCount, &header, packet), 
+                                           make_pair(1, header.len));
                         v.push_back(p);
                     } else {
-                        PacketDissection(packetsCount, a.Header(), a.Packet());
+                        PacketDissection(packetsCount, &header, packet);
                     }
                 } catch (const utils::BadProtocolType bpt) {
                     cerr << bpt.what() << '\n';
                 }
             }
+
+            pcap_freecode(&filter);
         }
 
         if (IsAggregationSet) {
@@ -85,27 +113,23 @@ int main(int argc, char* argv[]) {
         }
 
         if (IsSortBySet) {
-            const string& sortBy = arguments.sortBy;
-            if (sortBy == "packets") {
-                auto f = [](const pair<string,AggrInfo>& l, const pair<string,AggrInfo>& r) { return l.second.first > r.second.first; };
-                sort(v.begin(), v.end(), f);
-            } else if (sortBy == "bytes") {
-            auto f = [](const pair<string,AggrInfo>& l, const pair<string,AggrInfo>& r) { return l.second.second > r.second.second; };
-                sort(v.begin(), v.end(), f);
-            }
+            sort(v.begin(), v.end(), (arguments.sortBy == "packets") ? PacketsCompare : BytesCompare);
         }
 
+        size_t i = 1;
         if (IsAggregationSet) {
-            size_t i {1};
             for (const auto& p : v) {
-                if (i++ <= limit)
+                if (i <= limit) {
                     cout << p.first << ": " << p.second.first << ' ' << p.second.second << '\n';
+                    i++;
+                }
             }
         } else {
-            size_t i {1};
             for (const auto& p : v) {
-                if (i++ <= limit)
+                if (i <= limit) {
                     cout << p.first << '\n';
+                    i++;
+                }
             }
         }
     } catch (const runtime_error& e) {

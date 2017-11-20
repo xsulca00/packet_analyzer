@@ -39,7 +39,6 @@ namespace packet_analyzer::layer3 {
 
                 result << "IPv4: " << src << ' ' << dst << ' ' << (unsigned)ipv4->ip_ttl;
 
-                // TODO
                 if (argumentsParser.IsSet("a")) {
                     const string& key = arguments.aggregation;
                     if (key == "srcip") {

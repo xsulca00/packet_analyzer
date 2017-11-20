@@ -3,7 +3,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include <unordered_map>
+#include <map>
 
 extern "C" {
 #include <netinet/ip.h>
@@ -50,7 +50,7 @@ namespace packet_analyzer::layer3 {
             return make_pair("", "");
         }
     private:
-        unordered_map<int, pair<string, vector<string>>> errorMsgICMPv4;
+        map<int, pair<string, vector<string>>> errorMsgICMPv4;
     };
 
     class ICMPv6ErrorMessages {
@@ -83,7 +83,7 @@ namespace packet_analyzer::layer3 {
             return make_pair("", "");
         }
     private:
-        unordered_map<int, pair<string, vector<string>>> errorMsgICMPv6;
+        map<int, pair<string, vector<string>>> errorMsgICMPv6;
     };
 
     enum UpperLayerIPv6 { TCP = 6, UDP = 17, ICMPv6 = 58  };
