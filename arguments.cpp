@@ -14,13 +14,14 @@ namespace packet_analyzer::parameters {
         if (argc <= 0) throw runtime_error{"ArgumentParser: argc <= 0 !"};
 
         // process arguments
-        for (int c {getopt(argc, argv, getoptstr)}; c != -1; c = getopt(argc, argv, getoptstr)) {
+        int c;
+        while ((c = getopt(argc, argv, getoptstr)) != -1) {
             switch(c) {
+                case 'f': arguments["f"] = optarg; break;
                 case 'h': arguments["h"] = help; break;
-                case 'a': arguments["a"] = CheckAggrKey(optarg); break;
                 case 's': arguments["s"] = CheckSortKey(optarg); break;
                 case 'l': arguments["l"] = CheckLimit(optarg); break;
-                case 'f': arguments["f"] = optarg; break;
+                case 'a': arguments["a"] = CheckAggrKey(optarg); break;
                 default: throw runtime_error {"Invalid option!"};
             }
         }
@@ -66,7 +67,7 @@ namespace packet_analyzer::parameters {
 
     void addAggr(const string& key, size_t size) {
         auto& p = aggregationsStatistics[key];
-        ++p.first;
+        p.first += 1;
         p.second += size;
     }
 }
