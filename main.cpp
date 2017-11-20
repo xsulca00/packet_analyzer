@@ -22,7 +22,7 @@ extern "C" {
 #include "utils.h"
 #include "arguments.h"
 #include "analyzer.h"
-#include "layer2/ethernet.h"
+#include "layer2.h"
 
 using namespace packet_analyzer;
 using namespace std;
@@ -62,9 +62,9 @@ int main(int argc, char* argv[]) {
 
         vector<pair<string, Aggregation>> v; 
 
+
         for (const auto& name : ap.files()) {
             for (pcap::Analyzer a {name, options.filter.first}; a.NextPacket(); ++packetsCount) {
-            // TODO: do not print fragmented packet
                 try {
                     if (!options.aggregation.second) {
                         auto p = make_pair(PacketDissection(packetsCount, a.Header(), a.Packet()), 

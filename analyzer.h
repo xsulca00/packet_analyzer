@@ -31,10 +31,6 @@ namespace packet_analyzer::pcap {
 
     class Analyzer {
     public:
-        enum class Packet { Ethernet, IEEE_802_1Q, IEEE_802_1ad, 
-                            IPv4, IPv6, ICMPv4, ICMPv6,
-                            TCP, UDP };
-
         Analyzer(const string& name, const string& filter)
             : pcapFile{name}, pcapFilter{pcapFile, filter}
         {}

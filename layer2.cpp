@@ -11,11 +11,10 @@ extern "C" {
 #include <arpa/inet.h>
 }
 
-#include "ethernet.h"
-#include "vlan.h"
-#include "../arguments.h"
-#include "../layer3/ip.h"
-#include "../utils.h"
+#include "layer2.h"
+#include "arguments.h"
+#include "layer3/ip.h"
+#include "utils.h"
 
 namespace packet_analyzer::layer2 {
     string PacketLayer2(const uint8_t* packet, size_t packetLen) {
@@ -51,16 +50,16 @@ namespace packet_analyzer::layer2 {
             }
             case Layer2::IEEE_802_1q:
             {
-                msg += InfoVLAN(packet);
-                tie(packet, packetType) = SkipVLAN(packet);
+                msg += vlan::vlan_info(packet);
+                tie(packet, packetType) = vlan::vlan_skip(packet);
                 break;
             }
             case Layer2::IEEE_802_1ad:
             {
-                msg += InfoVLAN(packet);
-                tie(packet, packetType) = SkipVLAN(packet);
-                msg += InfoVLAN(packet);
-                tie(packet, packetType) = SkipVLAN(packet);
+                msg += vlan::vlan_info(packet);
+                tie(packet, packetType) = vlan::vlan_skip(packet);
+                msg += vlan::vlan_info(packet);
+                tie(packet, packetType) = vlan::vlan_skip(packet);
                 break;
             }
             default: throw utils::BadProtocolType{"Layer2: Unknown protocol type: " + to_string(packetType)};
@@ -94,5 +93,24 @@ namespace packet_analyzer::layer2 {
                   << setw(2) << unsigned{octets[4]} << ':'
                   << setw(2) << unsigned{octets[5]};
         return ss.str();
+    }
+
+    namespace vlan {
+        string vlan_info(const uint8_t* packet) {
+            constexpr size_t VlanOffset {12};
+            uint32_t vlanHdr {ntohl(*reinterpret_cast<const uint32_t*>(next(packet, VlanOffset)))};
+
+            vlan_hdr vlan {*reinterpret_cast<vlan_hdr*>(&vlanHdr)};
+            return ' ' + to_string(vlan.tci.vid);
+        }
+
+        pair<const uint8_t*, int> vlan_skip(const uint8_t* packet) {
+            constexpr size_t VlanOffsetPlusSize {12 + sizeof(vlan_hdr)};
+            int packetType {ntohs(*reinterpret_cast<const uint16_t*>(next(packet, VlanOffsetPlusSize)))};
+            packet = next(packet, 4);
+
+            return make_pair(packet, packetType);
+        }
+
     }
 }
